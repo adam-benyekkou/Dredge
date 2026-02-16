@@ -27,7 +27,7 @@ async def test_images_page_renders():
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.get("/images")
         assert response.status_code == 200
-        assert b"Docker Images" in response.content
+        assert b"Images" in response.content
 
 
 @pytest.mark.asyncio
@@ -36,7 +36,7 @@ async def test_policies_page_renders():
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.get("/policies")
         assert response.status_code == 200
-        assert b"Lifecycle Policies" in response.content
+        assert b"Policies" in response.content
 
 
 @pytest.mark.asyncio

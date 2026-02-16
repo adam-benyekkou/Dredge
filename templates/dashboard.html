@@ -52,9 +52,29 @@
 </style>
 {% endblock %}
 
-{% block content %}
-<h1>Dashboard</h1>
+{% block page_title %}<h1>Dashboard</h1>{% endblock %}
 
+{% block top_actions %}
+    <div style="display: flex; align-items: center; gap: 1.5rem;">
+        <label style="margin: 0; display: flex; align-items: center; gap: 0.5rem; color: var(--text-muted); font-size: 0.9rem; cursor: pointer;">
+            <input type="checkbox" id="dry-run-toggle" style="margin: 0; width: 1.2rem; height: 1.2rem;">
+            <span>Dry Run Mode</span>
+        </label>
+        
+        <button 
+            hx-post="/scan" 
+            hx-target="#scan-results" 
+            hx-indicator="#spinner"
+            class="primary"
+            style="margin: 0; padding: 0.5rem 1.25rem; font-weight: 600;"
+        >
+            <i data-lucide="refresh-cw" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 0.5rem;"></i>
+            Scan Now
+        </button>
+    </div>
+{% endblock %}
+
+{% block content %}
 <div class="kpi-row">
     <div class="kpi-card">
         <div class="kpi-label">Monthly Waste</div>
@@ -72,20 +92,20 @@
     </div>
 </div>
 
-<div class="action-bar">
-    <button hx-post="/scan" hx-target="#scan-results" hx-indicator="#spinner">
-        Scan Now
-    </button>
-    
-    <label class="toggle-switch">
-        <input type="checkbox" id="dry-run-toggle">
-        <span>Dry Run Mode</span>
-    </label>
-    
-    <div id="spinner" class="htmx-indicator">Scanning...</div>
-</div>
-
 <div id="scan-results">
-    <p style="color: var(--text-muted);">Click "Scan Now" to analyze Docker images.</p>
+    <div id="spinner" class="htmx-indicator" style="text-align: center; padding: 2rem;">
+        <div aria-busy="true">Scanning local Docker resources...</div>
+    </div>
+    
+    <div style="text-align: center; padding: 4rem 2rem; background-color: rgba(27, 38, 59, 0.3); border-radius: 12px; border: 2px dashed rgba(119, 141, 169, 0.2);">
+        <i data-lucide="search" style="width: 64px; height: 64px; color: var(--text-muted); margin-bottom: 1.5rem; opacity: 0.5;"></i>
+        <h3 style="color: var(--pico-color);">No scan data yet</h3>
+        <p style="color: var(--text-muted); max-width: 400px; margin: 0 auto 2rem;">
+            Dredge hasn't analyzed your environment in this session. Click 'Scan Now' to identify potential savings and dangling resources.
+        </p>
+        <button hx-post="/scan" hx-target="#scan-results" hx-indicator="#spinner" class="secondary outline" style="width: auto;">
+            Begin Analysis
+        </button>
+    </div>
 </div>
 {% endblock %}

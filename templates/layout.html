@@ -8,6 +8,9 @@
     <!-- PicoCSS -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@1/css/pico.min.css">
     
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
     <!-- HTMX -->
     <script src="https://unpkg.com/htmx.org@1.9.10"></script>
     
@@ -22,128 +25,291 @@
             --accent: #48CAE4;
             --danger: #D97D54;
             --text-muted: #778DA9;
+            --sidebar-width: 260px;
+            --header-height: 70px;
         }
         
         body {
-            display: grid;
-            grid-template-columns: 250px 1fr;
+            display: flex;
             height: 100vh;
             margin: 0;
             background-color: var(--pico-background-color);
             color: var(--pico-color);
+            overflow: hidden;
+            font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
         }
         
+        /* Sidebar Styling */
         .sidebar {
+            width: var(--sidebar-width);
             background-color: var(--pico-card-background-color);
-            padding: 1.5rem;
             display: flex;
             flex-direction: column;
-            border-right: 1px solid var(--text-muted);
+            border-right: 1px solid rgba(119, 141, 169, 0.2);
+            flex-shrink: 0;
+            padding: 1.5rem 1rem;
+            z-index: 10;
         }
         
         .logo {
             display: flex;
             align-items: center;
             gap: 0.75rem;
-            margin-bottom: 2rem;
+            padding: 0 0.5rem 1.5rem 0.5rem;
+            border-bottom: 1px solid rgba(119, 141, 169, 0.2);
+            margin-bottom: 1.5rem;
         }
         
         .logo-icon {
-            width: 40px;
-            height: 40px;
-            background: linear-gradient(135deg, var(--pico-primary), var(--accent));
-            border-radius: 50%;
+            color: var(--accent);
+            width: 32px;
+            height: 32px;
         }
         
         .logo-text {
             font-size: 1.5rem;
-            font-weight: bold;
-            color: var(--accent);
-        }
-        
-        .nav {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            gap: 0.5rem;
-        }
-        
-        .nav a {
-            padding: 0.75rem;
-            border-radius: 4px;
-            text-decoration: none;
+            font-weight: 800;
             color: var(--pico-color);
-            transition: background-color 0.2s;
+            letter-spacing: -0.5px;
         }
-        
-        .nav a:hover, .nav a.active {
-            background-color: var(--pico-primary);
+
+        .nav-group-label {
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-muted);
+            margin: 1.5rem 0.5rem 0.5rem;
+            font-weight: 600;
+        }
+
+        .nav-link {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.75rem;
+            border-radius: 6px;
+            text-decoration: none;
+            color: var(--text-muted);
+            transition: all 0.2s ease;
+            font-weight: 500;
+            border-left: 3px solid transparent;
+        }
+
+        .nav-link:hover {
+            background-color: rgba(0, 119, 182, 0.1);
+            color: var(--pico-color);
+        }
+
+        .nav-link.active {
+            background-color: rgba(0, 119, 182, 0.2);
+            color: var(--accent);
+            border-left-color: var(--accent);
+        }
+
+        .nav-link i {
+            width: 20px;
+            height: 20px;
+        }
+
+        .spacer {
+            flex: 1;
         }
         
         .sidebar-footer {
-            padding-top: 1rem;
-            border-top: 1px solid var(--text-muted);
+            background-color: rgba(13, 27, 42, 0.5);
+            padding: 1rem;
+            border-radius: 8px;
+            border: 1px solid rgba(119, 141, 169, 0.2);
+            margin-top: 1rem;
         }
         
-        .server-status {
+        .connection-status {
             display: flex;
             align-items: center;
-            gap: 0.5rem;
-            font-size: 0.875rem;
-            color: var(--text-muted);
+            gap: 0.75rem;
+            font-size: 0.85rem;
+            color: var(--pico-color);
         }
         
-        .status-indicator {
-            width: 8px;
-            height: 8px;
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            background-color: #2ECC71; /* Success Green */
             border-radius: 50%;
-            background-color: var(--accent);
+            box-shadow: 0 0 8px rgba(46, 204, 113, 0.6);
+        }
+
+        .status-text {
+            font-weight: 600;
         }
         
-        .main-content {
+        .sidebar-footer select {
+            margin-bottom: 0.75rem;
+            background-color: var(--pico-background-color);
+            border-color: var(--text-muted);
+            color: var(--pico-color);
+            font-size: 0.85rem;
+            padding: 0.4rem 2rem 0.4rem 0.75rem;
+            height: auto;
+        }
+
+        /* Main Content Area */
+        .main-wrapper {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            position: relative;
+        }
+
+        /* Top Header Bar */
+        .top-bar {
+            height: var(--header-height);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 2rem;
+            background-color: rgba(13, 27, 42, 0.95);
+            border-bottom: 1px solid rgba(119, 141, 169, 0.2);
+            backdrop-filter: blur(10px);
+            z-index: 5;
+        }
+
+        .page-title h1 {
+            margin: 0;
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--pico-color);
+        }
+
+        .top-actions {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+        }
+
+        /* Content Scroll Area */
+        .content-scrollable {
+            flex: 1;
             overflow-y: auto;
             padding: 2rem;
+            scroll-behavior: smooth;
         }
         
         .container {
             max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: var(--pico-background-color); 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: var(--text-muted); 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--pico-primary); 
         }
     </style>
     
     {% block extra_head %}{% endblock %}
 </head>
 <body>
+    <!-- Sidebar -->
     <aside class="sidebar">
         <div class="logo">
-            <div class="logo-icon"></div>
+            <i data-lucide="anchor" class="logo-icon"></i>
             <span class="logo-text">Dredge</span>
         </div>
         
         <nav class="nav">
-            <a href="/" {% if request.url.path == "/" %}class="active"{% endif %}>Dashboard</a>
-            <a href="/images" {% if request.url.path == "/images" %}class="active"{% endif %}>Images</a>
-            <a href="/volumes" {% if request.url.path == "/volumes" %}class="active"{% endif %}>Volumes</a>
-            <a href="/policies" {% if request.url.path == "/policies" %}class="active"{% endif %}>Policies</a>
-            <a href="/logs" {% if request.url.path == "/logs" %}class="active"{% endif %}>Logs</a>
+            <!-- ANALYZE Group -->
+            <div class="nav-group-label">Analyze</div>
+            
+            <a href="/" class="nav-link {% if request.url.path == '/' %}active{% endif %}">
+                <i data-lucide="layout-dashboard"></i>
+                <span>Dashboard</span>
+            </a>
+            
+            <a href="/images" class="nav-link {% if request.url.path == '/images' %}active{% endif %}">
+                <i data-lucide="layers"></i>
+                <span>Images</span>
+            </a>
+            
+            <a href="/volumes" class="nav-link {% if request.url.path == '/volumes' %}active{% endif %}">
+                <i data-lucide="hard-drive"></i>
+                <span>Volumes</span>
+            </a>
+
+            <!-- CONFIGURE Group -->
+            <div class="nav-group-label">Configure</div>
+            
+            <a href="/policies" class="nav-link {% if request.url.path == '/policies' %}active{% endif %}">
+                <i data-lucide="shield-check"></i>
+                <span>Policies</span>
+            </a>
+            
+            <a href="/logs" class="nav-link {% if request.url.path == '/logs' %}active{% endif %}">
+                <i data-lucide="clipboard-list"></i>
+                <span>Logs</span>
+            </a>
         </nav>
         
+        <div class="spacer"></div>
+        
         <div class="sidebar-footer">
-            <select>
+            <select aria-label="Select Registry">
                 <option selected>Local Socket</option>
                 <option>Remote Registry</option>
             </select>
             
-            <div class="server-status">
-                <span class="status-indicator"></span>
-                <span>Connected</span>
+            <div class="connection-status">
+                <div class="status-dot"></div>
+                <span class="status-text">Connected</span>
             </div>
         </div>
     </aside>
     
-    <main class="main-content">
-        <div class="container">
-            {% block content %}{% endblock %}
-        </div>
-    </main>
+    <!-- Main Content Wrapper -->
+    <div class="main-wrapper">
+        <!-- Top Header Bar -->
+        <header class="top-bar">
+            <div class="page-title">
+                {% block page_title %}<h1>Overview</h1>{% endblock %}
+            </div>
+            <div class="top-actions">
+                {% block top_actions %}
+                    <!-- Default actions or empty -->
+                    <button class="outline contrast" style="padding: 0.4rem 1rem; font-size: 0.9rem; border: 1px solid var(--text-muted); color: var(--text-muted);">
+                        <i data-lucide="bell" style="width: 16px; height: 16px; vertical-align: middle; margin-right: 0.25rem;"></i>
+                        Alerts
+                    </button>
+                {% endblock %}
+            </div>
+        </header>
+
+        <!-- Scrollable Content -->
+        <main class="content-scrollable">
+            <div class="container">
+                {% block content %}{% endblock %}
+            </div>
+        </main>
+    </div>
+
+    <!-- Initialize Lucide Icons -->
+    <script>
+        lucide.createIcons();
+        
+        // Re-initialize icons after HTMX swaps
+        document.body.addEventListener('htmx:afterSwap', function(evt) {
+            lucide.createIcons();
+        });
+    </script>
 </body>
 </html>
