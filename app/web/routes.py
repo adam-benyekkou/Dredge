@@ -1,14 +1,17 @@
 """API routes for Dredge"""
 
+from html import escape
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
+import logging
 
 from app.core.registry import LocalDockerClient
 from app.core.finops import CostCalculator
 
 router = APIRouter()
 templates = Jinja2Templates(directory="templates")
+logger = logging.getLogger(__name__)
 
 
 @router.get("/", response_class=HTMLResponse)
@@ -51,18 +54,20 @@ async def scan_images(request: Request):
         total_size_bytes = sum(img.size_bytes for img in images)
         total_cost = CostCalculator.calculate_monthly_cost(total_size_bytes)
         
-        # Build HTML response for HTMX
+        # Build HTML response for HTMX (WITH XSS PROTECTION)
         html_rows = []
         for img in images:
-            repo = img.tags[0].split(':')[0] if img.tags else 'N/A'
-            tag = img.tags[0].split(':')[1] if ':' in (img.tags[0] if img.tags else '') else 'latest'
+            # SECURITY FIX: Escape all user-controlled data
+            repo = escape(img.tags[0].split(':')[0] if img.tags else 'N/A')
+            tag = escape(img.tags[0].split(':')[1] if ':' in (img.tags[0] if img.tags else '') else 'latest')
+            digest_escaped = escape(img.digest)
             size_gb = img.size_bytes / (1024 ** 3)
             cost = CostCalculator.calculate_monthly_cost(img.size_bytes)
-            created = img.created_at.strftime('%Y-%m-%d %H:%M') if img.created_at else 'N/A'
+            created = escape(img.created_at.strftime('%Y-%m-%d %H:%M') if img.created_at else 'N/A')
             
             html_rows.append(f"""
                 <tr>
-                    <td><input type="checkbox" name="image-select" value="{img.digest}"></td>
+                    <td><input type="checkbox" name="image-select" value="{digest_escaped}"></td>
                     <td>{repo}</td>
                     <td>{tag}</td>
                     <td>{size_gb:.2f} GB</td>
@@ -99,7 +104,9 @@ async def scan_images(request: Request):
         return HTMLResponse(content=result_html)
         
     except Exception as e:
+        # SECURITY FIX: Log full error internally, return generic message
+        logger.error(f"Scan failed: {str(e)}", exc_info=True)
         return HTMLResponse(
-            content=f'<p style="color: var(--danger);">Error scanning images: {str(e)}</p>',
+            content='<p style="color: var(--danger);">Scan failed. Please check Docker daemon connection.</p>',
             status_code=500
         )
