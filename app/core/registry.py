@@ -519,7 +519,9 @@ class DockerRegistryClient(BaseRegistryClient):
                     elif login_resp.status_code == 401:
                         return {"success": False, "message": "Authentication failed: Invalid username or token"}
                     else:
-                        return {"success": False, "message": f"Login failed: {login_resp.status_code} {login_resp.reason}"}
+                        # DEBUG LOGGING for 500 error
+                        logger.error(f"Docker Hub Login Failed: {login_resp.status_code} {login_resp.text}")
+                        return {"success": False, "message": f"Login failed: {login_resp.status_code} {login_resp.reason} - {login_resp.text[:100]}"}
                 
                 # If no password provided (anonymous?), check if user exists
                 hub_url = f"https://hub.docker.com/v2/repositories/{self.username}"

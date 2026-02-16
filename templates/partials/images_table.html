@@ -1,0 +1,122 @@
+<div class="table-container" id="image-table">
+    <script>
+        // Checkbox Logic
+        document.addEventListener('DOMContentLoaded', () => {
+            // Re-bind events every time this partial is swapped
+            initCheckboxLogic();
+        });
+        
+        // Also run immediately in case of HTMX swap where DOMContentLoaded already fired
+        if (document.readyState === 'complete' || document.readyState === 'interactive') {
+            initCheckboxLogic();
+        }
+
+        function initCheckboxLogic() {
+            const selectAll = document.getElementById('select-all');
+            const checkboxes = document.querySelectorAll('input[name="selected_images"]');
+            const batchBtn = document.getElementById('batch-delete-btn');
+            
+            if (!batchBtn) return; // Might be outside partial
+
+            function updateBatchBtn() {
+                const checkedCount = document.querySelectorAll('input[name="selected_images"]:checked').length;
+                batchBtn.style.display = checkedCount > 0 ? 'inline-block' : 'none';
+                
+                // Update button text with count
+                if (checkedCount > 0) {
+                    batchBtn.innerHTML = `<i data-lucide="trash-2" style="width: 16px; height: 16px; vertical-align: middle; margin-right: 0.25rem;"></i> Delete Selected (${checkedCount})`;
+                    lucide.createIcons();
+                }
+            }
+
+            if (selectAll) {
+                // Remove old listeners to avoid duplicates if re-running
+                const newSelectAll = selectAll.cloneNode(true);
+                selectAll.parentNode.replaceChild(newSelectAll, selectAll);
+                
+                newSelectAll.addEventListener('change', (e) => {
+                    checkboxes.forEach(cb => cb.checked = e.target.checked);
+                    updateBatchBtn();
+                });
+            }
+
+            checkboxes.forEach(cb => {
+                cb.addEventListener('change', updateBatchBtn);
+            });
+        }
+    </script>
+
+    <table>
+        <thead>
+            <tr>
+                <th style="width: 40px;"><input type="checkbox" id="select-all"></th>
+                <th>Repository</th>
+                <th>Tag</th>
+                <th>Source</th>
+                <th>Size</th>
+                <th>Created</th>
+                <th>Status</th>
+                <th>Monthly Cost</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% if images %}
+                {% for image in images %}
+                <tr id="image-{{ image.digest.replace(':', '-') }}">
+                    <td>
+                        <!-- GHCR FIX: Send first tag if available, else digest. Format: ID|Source -->
+                        {% set img_id = image.tags[0] if image.tags else image.digest %}
+                        <input type="checkbox" name="selected_images" value="{{ img_id }}|{{ image.source }}" form="batch-form">
+                    </td>
+                    <td class="font-mono" style="color: var(--accent);">{{ image.tags[0].split(':')[0] if image.tags else 'N/A' }}</td>
+                    <td class="font-mono">{{ image.tags[0].split(':')[1] if ':' in (image.tags[0] if image.tags else '') else 'latest' }}</td>
+                    <td><span class="tag-pill">{{ image.source }}</span></td>
+                    <td class="font-mono" style="text-align: right;">{{ (image.size_bytes / 1024**3)|round(2) }} GB</td>
+                    <td>{{ image.created_at.strftime('%Y-%m-%d %H:%M') if image.created_at else 'N/A' }}</td>
+                    <td>
+                        <span class="badge {{ image.status.value.lower() }}">
+                            {{ image.status.value }}
+                        </span>
+                    </td>
+                    <td style="text-align: right;">{{ settings.currency_symbol }}{{ (image.size_bytes / 1024**3 * (settings.dockerhub_price_per_gb if image.source == 'Docker Hub' else (settings.ghcr_price_per_gb if image.source == 'GitHub Packages' else settings.custom_price_per_gb)))|round(2) }}/mo</td>
+                    <td>
+                        <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
+                            {% if image.status == 'QUARANTINED' %}
+                            <button 
+                                class="btn-primary" 
+                                style="padding: 0.25rem 0.75rem; font-size: 0.8rem;"
+                                hx-post="/images/{{ image.digest }}/restore"
+                                hx-target="#image-{{ image.digest.replace(':', '-') }}"
+                                hx-swap="outerHTML"
+                            >
+                                Restore
+                            </button>
+                            {% endif %}
+                            <button 
+                                class="btn-danger" 
+                                style="padding: 0.25rem 0.75rem; font-size: 0.8rem;"
+                                hx-delete="/images/{{ image.digest }}"
+                                hx-confirm="Are you sure you want to purge this image?"
+                                hx-target="#image-{{ image.digest.replace(':', '-') }}"
+                                hx-swap="outerHTML"
+                            >
+                                <i data-lucide="trash-2" style="width: 14px; height: 14px;"></i> Purge
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            {% else %}
+                <tr>
+                    <td colspan="9" style="text-align: center; padding: 4rem 2rem;">
+                        <div style="display: flex; flex-direction: column; align-items: center; opacity: 0.5;">
+                            <i data-lucide="package" style="width: 48px; height: 48px; margin-bottom: 1rem; color: var(--text-muted);"></i>
+                            <span style="color: var(--text-muted); font-size: 1rem;">No images found for the selected source.</span>
+                        </div>
+                    </td>
+                </tr>
+            {% endif %}
+        </tbody>
+    </table>
+</div>

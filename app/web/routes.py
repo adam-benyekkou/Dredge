@@ -843,7 +843,43 @@ async def batch_delete_images(request: Request, session: Session = Depends(get_s
         # But HTMX expects a snippet to replace target.
         # Since we targeted #image-table, we should re-render the table.
         
-        return await images_view(request, session)
+        # Check if it is HTMX request (it usually is for this endpoint)
+        # We want to return ONLY the partial to avoid UI duplication
+        
+        # We need to manually call images_view logic to get the data, but render the partial
+        # Reuse logic from images_view but force partial rendering
+        
+        # 1. Local Images
+        local_client = RegistryClientFactory.get_client()
+        images = local_client.list_images()
+        
+        # 2. Remote Images
+        remote_configs = session.exec(select(RegistryConfig).where(RegistryConfig.is_active == True)).all()
+        for config in remote_configs:
+            try:
+                remote_client = RegistryClientFactory.get_client(config)
+                images.extend(remote_client.list_images())
+            except Exception:
+                pass
+
+        # 3. Collect unique sources (for filter, though filter is outside partial usually, but needed for context)
+        all_sources = sorted(list(set([img.source for img in images] + ["Local"])))
+        
+        # Get settings
+        settings = session.get(AppSettings, 1)
+        
+        response = templates.TemplateResponse(
+            request,
+            "partials/images_table.html",
+            {
+                "images": images,
+                "sources": all_sources,
+                "current_source": "All", # Reset filter after delete for simplicity, or grab from query if we preserved it
+                "settings": settings,
+            }
+        )
+        response.headers["HX-Trigger"] = '{"showMessage": {"message": "Batch Deletion Completed", "type": "success"}}'
+        return response
         
     except Exception as e:
         logger.error(f"Batch delete failed: {e}")
