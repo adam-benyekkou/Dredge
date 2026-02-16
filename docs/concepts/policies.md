@@ -26,3 +26,12 @@ Currently, policies can be triggered manually via the **Policies** page.
 3.  Click **"Run Policy Now"**.
 4.  View the results in the real-time notification toast.
 
+## Registry Health Monitoring
+
+Dredge proactively monitors the health of your external registry connections to ensure high performance and responsiveness:
+
+*   **Proactive Pings**: Every 5 minutes, a background task attempts to verify connectivity with all active registries.
+*   **Automatic Deactivation**: If a registry fails a connection test (e.g., expired credentials or network failure), Dredge automatically marks it as `INACTIVE`.
+*   **Lazy Verification**: When listing images, Dredge performs a quick connection check. If the registry is unreachable, it is disabled immediately to prevent UI hanging.
+*   **Manual Reactivation**: Once the connection issue is resolved (e.g., by updating credentials in the **Registries** page), you can re-enable the registry for scanning.
+

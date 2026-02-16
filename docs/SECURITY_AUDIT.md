@@ -230,10 +230,10 @@ def _list_images_sync(self):
 
 ## 📋 MISSING FEATURES (Security)
 
-### 1. **No Authentication/Authorization**
-- Anyone can access `/scan` endpoint
-- No user management
-- No API keys
+### 1. **No Authentication/Authorization** [FIXED]
+- JWT Authentication implemented for all routes.
+- Administrator username/password management in settings.
+- Secure password hashing with PBKDF2-SHA256.
 
 ### 2. **No HTTPS/TLS**
 - Credentials/data transmitted in plaintext

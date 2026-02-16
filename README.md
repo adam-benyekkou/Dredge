@@ -26,11 +26,13 @@ A powerful, nautical-themed platform for managing Docker infrastructure costs an
 - 📊 **FinOps Dashboard** - Track waste, efficiency scores, and reclaimable space with lazy-loaded, high-performance views.
 - 🗑️ **Mass Cleanup** - Batch delete images across multiple registries with asynchronous background processing.
 - 🛡️ **Lifecycle Policies** - Automated quarantine logic based on image age and count per repository.
+- 🔐 **JWT Security** - Secure access with JSON Web Token authentication and PBKDF2-SHA256 password hashing.
+- 📡 **Health Monitoring** - Automated registry health checks with proactive 5-minute pings and auto-disable for broken connections.
 - 🎨 **Deep Harbor UI** - Beautiful dark nautical theme with real-time toast notifications and interactive forms.
 
 ## 🛠️ Tech Stack
 
-**Backend:** Python 3.11 • FastAPI • SQLModel • Docker SDK  
+**Backend:** Python 3.11 • FastAPI • SQLModel • Docker SDK • JWT (python-jose)  
 **Frontend:** HTMX • Jinja2 • Custom CSS (Deep Harbor theme)  
 **Infrastructure:** Docker • Docker Compose • SQLite
 
@@ -47,6 +49,15 @@ Open [http://localhost:8000](http://localhost:8000) to access the dashboard.
 **That's it!** 🎉
 
 For detailed installation, configuration, and usage instructions, see the [📖 Documentation](https://adam-benyekkou.github.io/Dredge/).
+
+## 🔒 Security
+
+Dredge uses secure authentication practices to protect your infrastructure data:
+
+- **JWT Authentication**: All API and UI routes are protected by JSON Web Tokens.
+- **Password Hashing**: Passwords are hashed using the secure PBKDF2-SHA256 algorithm.
+- **Default Credentials**: The initial installation uses `admin` / `admin`. **Change these immediately** in the **Settings > General** tab.
+- **Secure Storage**: External registry credentials are encrypted at rest in the database.
 
 ## 📚 Documentation
 
@@ -66,6 +77,8 @@ For comprehensive guides, API reference, and deployment instructions, visit:
 
 ### System Overview
 
+Dredge follows a **Modular Domain-Driven Design (DDD)** architecture, where logic is divided into self-contained feature modules (Images, Settings, etc.).
+
 ```mermaid
 graph TB
     subgraph "Client Browser"
@@ -73,10 +86,14 @@ graph TB
     end
     
     subgraph "Dredge Container"
-        API[FastAPI<br/>Web Server]
+        API[FastAPI<br/>Modular Aggregator]
+        subgraph "Modules"
+            Images[Images Module<br/>DDD Structure]
+            Settings[Settings Module<br/>DDD Structure]
+        end
+        Auth[Auth Service<br/>JWT + PBKDF2]
         Registry[Registry Client<br/>Docker SDK]
-        FinOps[FinOps Engine<br/>Cost Calculator]
-        Models[(SQLModel<br/>ImageArtifact)]
+        Models[(SQLModel<br/>SQLite)]
     end
     
     subgraph "Host System"

@@ -20,4 +20,6 @@ features:
     details: Seamlessly manage images across Docker Hub, AWS ECR, GCP Artifact Registry, and more.
   - title: Automated Lifecycle
     details: Set policies to automatically clean up old artifacts based on age or count.
+  - title: Secure & Proactive
+    details: Protected by JWT auth and proactive registry health monitoring to ensure system reliability.
 ---
