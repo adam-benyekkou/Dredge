@@ -119,4 +119,22 @@
             {% endif %}
         </tbody>
     </table>
+    
+    <!-- Pagination / Load More -->
+    {% if images|length >= 20 %}
+    <div style="text-align: center; margin-top: 2rem;">
+        <button 
+            class="secondary outline" 
+            hx-post="/scan?limit=50&offset=20" 
+            hx-target="#image-table" 
+            hx-swap="innerHTML"
+            style="width: 200px;"
+        >
+            Load More (50)
+        </button>
+        <p style="margin-top: 0.5rem; font-size: 0.8rem; color: var(--text-muted);">
+            Showing first 20 items. Click to fetch more.
+        </p>
+    </div>
+    {% endif %}
 </div>

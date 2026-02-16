@@ -17,11 +17,14 @@
         </form>
 
         <!-- Batch Action Form (Delete) -->
-        <form id="batch-form" hx-delete="/images/batch" hx-confirm="Are you sure you want to delete all selected images?" hx-target="#image-table" hx-swap="outerHTML" style="margin: 0;">
+        <form id="batch-form" hx-delete="/images/batch" hx-confirm="Are you sure you want to delete all selected images?" hx-target="#image-table" hx-swap="outerHTML" hx-indicator="#batch-loader" style="margin: 0;">
             <button id="batch-delete-btn" type="submit" class="btn-danger" style="display: none; padding: 0.5rem 1rem; font-size: 0.9rem;">
                 <i data-lucide="trash-2" style="width: 16px; height: 16px; vertical-align: middle; margin-right: 0.25rem;"></i>
                 Delete Selected
             </button>
+            <div id="batch-loader" class="htmx-indicator" style="display: none; margin-left: 0.5rem;">
+                <span aria-busy="true">Deleting...</span>
+            </div>
         </form>
 
         <button 

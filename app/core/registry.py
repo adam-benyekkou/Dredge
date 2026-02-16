@@ -23,8 +23,12 @@ class BaseRegistryClient(ABC):
     """Abstract base class for registry clients"""
     
     @abstractmethod
-    def list_images(self) -> List[ImageArtifact]:
-        """List all images in the registry"""
+    def list_images(self, limit: int = 100) -> List[ImageArtifact]:
+        """List all images in the registry
+        
+        Args:
+            limit: Maximum number of images to return
+        """
         pass
     
     @abstractmethod
@@ -89,10 +93,17 @@ class LocalDockerClient(BaseRegistryClient):
         except Exception as e:
             return {"success": False, "message": f"Connection failed: {str(e)}"}
     
-    def list_images(self) -> List[ImageArtifact]:
+    def list_images(self, limit: int = 100) -> List[ImageArtifact]:
         """List all local Docker images"""
         try:
+            # Docker Py doesn't support server-side limit in list(), so we slice locally
             images = self.client.images.list()
+            # Sort by Created (newest first)
+            images.sort(key=lambda x: x.attrs.get('Created', ''), reverse=True)
+            
+            # Apply limit
+            images = images[:limit]
+            
             artifacts = []
             
             for img in images:
@@ -602,34 +613,41 @@ class DockerRegistryClient(BaseRegistryClient):
         except Exception as e:
             logger.error(f"Failed to get token from {realm}: {e}")
 
-    def list_images(self) -> List[ImageArtifact]:
+    def list_images(self, limit: int = 100) -> List[ImageArtifact]:
         """List images in the registry"""
         artifacts = []
         
         if self.config.type == RegistryType.DOCKERHUB:
-            return self._list_dockerhub_images()
+            return self._list_dockerhub_images(limit=limit)
         elif self.config.type == RegistryType.GHCR:
-            return self._list_ghcr_images()
+            return self._list_ghcr_images(limit=limit)
         
         # Generic V2 Catalog API
         try:
+            # V2 _catalog usually returns paginated results via 'n' param
             catalog_url = f"{self.endpoint}/v2/_catalog"
-            resp = self.session.get(catalog_url, timeout=10)
+            # Pass limit if supported
+            resp = self.session.get(catalog_url, params={"n": limit}, timeout=10)
             if resp.status_code == 200:
                 data = resp.json()
                 repositories = data.get("repositories", [])
                 
+                count = 0
                 for repo in repositories:
+                    if count >= limit: break
+                    
                     tags = self._list_tags(repo)
                     for tag in tags:
+                        if count >= limit: break
                         artifacts.append(self._create_artifact(repo, tag))
+                        count += 1
         except Exception as e:
             logger.error(f"Failed to list images from {self.config.name}: {e}")
             
         return artifacts
 
 
-    def _list_ghcr_images(self) -> List[ImageArtifact]:
+    def _list_ghcr_images(self, limit: int = 100) -> List[ImageArtifact]:
         """List images using GitHub API (GHCR doesn't support _catalog)"""
         # https://docs.github.com/en/rest/packages/packages?apiVersion=2022-11-28#list-packages-for-the-authenticated-user
         
@@ -652,10 +670,12 @@ class DockerRegistryClient(BaseRegistryClient):
         # 1. List packages for authenticated user
         # GET /user/packages?package_type=container
         url = "https://api.github.com/user/packages"
-        params = {"package_type": "container", "per_page": 100}
+        # We can limit packages, but not total images easily. 
+        # Just grab fewer packages to start.
+        params = {"package_type": "container", "per_page": min(limit, 100)}
         
         try:
-            while url:
+            while url and len(artifacts) < limit:
                 resp = gh_session.get(url, params=params, timeout=10)
                 if resp.status_code != 200:
                     # Fallback: maybe they provided an Org name as username? 
@@ -664,7 +684,11 @@ class DockerRegistryClient(BaseRegistryClient):
                     break
                     
                 data = resp.json()
+                if not data: break
+                
                 for pkg in data:
+                    if len(artifacts) >= limit: break
+                    
                     pkg_name = pkg.get("name")
                     owner = pkg.get("owner", {}).get("login")
                     full_name = f"{owner}/{pkg_name}"
@@ -672,11 +696,13 @@ class DockerRegistryClient(BaseRegistryClient):
                     # 2. List versions (tags) for each package
                     # GET /user/packages/container/{package_name}/versions
                     v_url = f"https://api.github.com/user/packages/container/{pkg_name}/versions"
-                    v_resp = gh_session.get(v_url, params={"per_page": 100})
+                    v_resp = gh_session.get(v_url, params={"per_page": min(limit - len(artifacts), 100)})
                     
                     if v_resp.status_code == 200:
                         versions = v_resp.json()
                         for ver in versions:
+                            if len(artifacts) >= limit: break
+                            
                             tags = ver.get("metadata", {}).get("container", {}).get("tags", [])
                             if not tags:
                                 continue # Skip untagged images
@@ -714,7 +740,7 @@ class DockerRegistryClient(BaseRegistryClient):
             
         return artifacts
 
-    def _list_dockerhub_images(self) -> List[ImageArtifact]:
+    def _list_dockerhub_images(self, limit: int = 100) -> List[ImageArtifact]:
         """List images using Docker Hub API"""
         if not self.username:
             return []
@@ -734,9 +760,10 @@ class DockerRegistryClient(BaseRegistryClient):
                     hub_session.headers.update({"Authorization": f"JWT {token}"})
             
             # Pagination loop
-            while hub_url:
+            while hub_url and len(artifacts) < limit:
                 try:
-                    resp = hub_session.get(hub_url, params={"page_size": 100}, timeout=10)
+                    # Fetch repos (limit page size to requested limit or 100 max)
+                    resp = hub_session.get(hub_url, params={"page_size": min(limit, 100)}, timeout=10)
                     if resp.status_code != 200:
                         break
                         
@@ -744,16 +771,21 @@ class DockerRegistryClient(BaseRegistryClient):
                     repos = data.get("results", [])
                     
                     for repo in repos:
+                        if len(artifacts) >= limit: break
+                        
                         repo_name = f"{repo.get('namespace')}/{repo.get('name')}"
                         # Fetch tags for this repo (Parallelize or Lazy Load?)
                         # Optimization: Only fetch 5 recent tags for MVP speed, or use a separate thread pool?
                         # For now, we wrap in try/except so one failed repo doesn't kill the loop
                         try:
+                            remaining = limit - len(artifacts)
                             tags_url = f"https://hub.docker.com/v2/repositories/{repo_name}/tags"
-                            tags_resp = hub_session.get(tags_url, params={"page_size": 25}, timeout=5)
+                            tags_resp = hub_session.get(tags_url, params={"page_size": min(remaining, 25)}, timeout=5)
                             if tags_resp.status_code == 200:
                                 tags = tags_resp.json().get("results", [])
                                 for tag in tags:
+                                    if len(artifacts) >= limit: break
+                                    
                                     # Parse size and date
                                     size = tag.get('full_size', 0)
                                     last_updated = tag.get('last_updated')

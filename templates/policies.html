@@ -36,15 +36,28 @@
                     <div class="toggle-track">
                         <div class="toggle-thumb"></div>
                     </div>
-                    <span class="toggle-label">Enable automated scans</span>
+                    <span class="toggle-label">Enable automated scans (Daily)</span>
                 </label>
 
-                <footer style="margin-top: 2rem; border-top: 1px solid var(--border-subtle); padding-top: 1rem;">
+                <footer style="margin-top: 2rem; border-top: 1px solid var(--border-subtle); padding-top: 1rem; display: flex; justify-content: space-between; align-items: center;">
                     <button type="submit" class="primary">Update Policy</button>
-                    {% if updated %}
-                        <span style="color: #4ade80; margin-left: 1rem; font-size: 0.9rem;">✓ Policy updated</span>
-                    {% endif %}
+                    
+                    <button type="button" class="secondary outline" 
+                        hx-post="/policies/run" 
+                        hx-target="#policy-result"
+                        hx-swap="innerHTML"
+                        style="border-color: var(--warning); color: var(--warning);">
+                        <i data-lucide="play" style="width: 14px; height: 14px; margin-right: 0.5rem; vertical-align: middle;"></i>
+                        Run Policy Now
+                    </button>
                 </footer>
+                
+                {% if updated %}
+                    <div style="margin-top: 1rem; color: #4ade80; font-size: 0.9rem;">✓ Policy updated</div>
+                {% endif %}
+                
+                <!-- Result Container for Manual Run -->
+                <div id="policy-result" style="margin-top: 1rem;"></div>
             </form>
         </div>
 
