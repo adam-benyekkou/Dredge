@@ -3,6 +3,10 @@ import { defineConfig } from 'vitepress'
 export default defineConfig({
   title: "Dredge",
   description: "Docker FinOps & Lifecycle Management Tool",
+  ignoreDeadLinks: [
+    // Ignore all localhost links
+    /^https?:\/\/localhost/,
+  ],
   themeConfig: {
     nav: [
       { text: 'Home', link: '/' },
