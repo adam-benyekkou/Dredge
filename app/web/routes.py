@@ -98,7 +98,7 @@ async def images_view(request: Request, session: Session = Depends(get_session))
             images = [img for img in images if img.source == source_filter]
         
         # 4. Collect unique sources for the filter dropdown
-        sources = sorted(list(set(img.source for img in images)) + ["Local"])
+        sources = sorted(list(set([img.source for img in images] + ["Local"])))
         
     except Exception as e:
         logger.error(f"Failed to fetch images for view: {str(e)}")
@@ -133,7 +133,7 @@ async def volumes_view(request: Request, session: Session = Depends(get_session)
         if source_filter and source_filter != "All":
             volumes = [v for v in volumes if v.source == source_filter]
             
-        sources = sorted(list(set(v.source for v in volumes)) + ["Local"])
+        sources = sorted(list(set([v.source for v in volumes] + ["Local"])))
         
     except Exception as e:
         logger.error(f"Failed to fetch volumes for view: {str(e)}")
