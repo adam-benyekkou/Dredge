@@ -542,7 +542,19 @@ class DockerRegistryClient(BaseRegistryClient):
                     # Get user info from packages listing if possible, or just confirm access
                     return {"success": True, "message": f"Successfully authenticated with GitHub Packages (read:packages)"}
                 elif resp.status_code == 401:
-                    return {"success": False, "message": "Authentication failed: Invalid token or missing 'read:packages' scope"}
+                    # Parse specific error if available
+                    try:
+                        error_msg = resp.json().get("message", "Unknown error")
+                    except:
+                        error_msg = resp.text
+                    return {"success": False, "message": f"Authentication failed: {error_msg}. Check if your token has 'read:packages' scope."}
+                elif resp.status_code == 403:
+                    # Check for SSO requirement
+                    try:
+                        error_msg = resp.json().get("message", "Unknown error")
+                    except:
+                        error_msg = resp.text
+                    return {"success": False, "message": f"Access Forbidden (403): {error_msg}. If using SSO, authorize the token."}
                 else:
                     return {"success": False, "message": f"GitHub API connection failed: {resp.status_code} {resp.reason}"}
 

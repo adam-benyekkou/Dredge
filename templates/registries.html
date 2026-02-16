@@ -40,7 +40,7 @@
             </label>
 
             <label for="type">Registry Provider
-                <select id="type" name="type" required>
+                <select id="type" name="type" required onchange="updateFormFields(this)">
                     <option value="DOCKERHUB">Docker Hub</option>
                     <option value="GHCR">GitHub Container Registry</option>
                     <option value="ECR">Amazon ECR</option>
@@ -51,16 +51,20 @@
                 </select>
             </label>
 
-            <label for="endpoint">Endpoint (Optional)
-                <input type="text" id="endpoint" name="endpoint" placeholder="e.g. index.docker.io/v1/">
-                <small>Leave empty for default provider endpoints.</small>
-            </label>
+            <div id="endpoint-container" style="display: none;">
+                <label for="endpoint">Endpoint URL
+                    <input type="text" id="endpoint" name="endpoint" placeholder="e.g. index.docker.io/v1/">
+                    <small>Required for custom or cloud-specific endpoints.</small>
+                </label>
+            </div>
 
             <div class="grid">
-                <label for="username">Username
+                <label for="username">
+                    <span id="username-label">Username</span>
                     <input type="text" id="username" name="username" placeholder="Username / Access Key">
                 </label>
-                <label for="password">Password / Token
+                <label for="password">
+                    <span id="password-label">Password / Token</span>
                     <input type="password" id="password" name="password" placeholder="••••••••">
                 </label>
             </div>
@@ -106,4 +110,49 @@
         font-size: 0.8rem;
     }
 </style>
+
+<script>
+    function updateFormFields(selectElement) {
+        // Handle both Add and Edit modals (passed element might be in different contexts)
+        const form = selectElement.closest('form');
+        const provider = selectElement.value;
+        
+        const endpointContainer = form.querySelector('#endpoint-container');
+        const usernameLabel = form.querySelector('#username-label') || form.querySelector('label[for*="username"]');
+        const passwordLabel = form.querySelector('#password-label') || form.querySelector('label[for*="password"]');
+        const usernameInput = form.querySelector('input[name="username"]');
+        const passwordInput = form.querySelector('input[name="password"]');
+
+        // Reset defaults
+        endpointContainer.style.display = 'none';
+        usernameLabel.innerText = "Username";
+        passwordLabel.innerText = "Password / Token";
+        usernameInput.placeholder = "Username";
+        passwordInput.placeholder = "••••••••";
+
+        if (provider === 'DOCKERHUB') {
+            usernameLabel.innerText = "Docker ID";
+            passwordLabel.innerText = "Access Token (PAT)";
+            usernameInput.placeholder = "e.g. adam123";
+        } 
+        else if (provider === 'GHCR') {
+            usernameLabel.innerText = "GitHub Username";
+            passwordLabel.innerText = "Personal Access Token (PAT)";
+            usernameInput.placeholder = "e.g. adam-benyekkou";
+        }
+        else if (['ECR', 'ACR', 'GCR', 'GAR', 'CUSTOM'].includes(provider)) {
+            endpointContainer.style.display = 'block';
+            if (provider === 'ECR') {
+                usernameLabel.innerText = "AWS Access Key ID";
+                passwordLabel.innerText = "AWS Secret Access Key";
+            }
+        }
+    }
+    
+    // Initialize on load for the Add Modal
+    document.addEventListener('DOMContentLoaded', () => {
+        const typeSelect = document.getElementById('type');
+        if(typeSelect) updateFormFields(typeSelect);
+    });
+</script>
 {% endblock %}

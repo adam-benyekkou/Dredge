@@ -93,17 +93,17 @@ async def images_view(request: Request, session: Session = Depends(get_session))
             except Exception as re:
                 logger.error(f"Failed to fetch images from registry {config.name}: {str(re)}")
 
-        # 3. Apply Filtering
+        # 3. Collect unique sources BEFORE filtering (Fix for disappearing sources)
+        all_sources = sorted(list(set([img.source for img in images] + ["Local"])))
+
+        # 4. Apply Filtering
         if source_filter and source_filter != "All":
             images = [img for img in images if img.source == source_filter]
-        
-        # 4. Collect unique sources for the filter dropdown
-        sources = sorted(list(set([img.source for img in images] + ["Local"])))
         
     except Exception as e:
         logger.error(f"Failed to fetch images for view: {str(e)}")
         images = []
-        sources = ["Local"]
+        all_sources = ["Local"]
         settings = None
         
     return templates.TemplateResponse(
@@ -111,7 +111,7 @@ async def images_view(request: Request, session: Session = Depends(get_session))
         "images.html",
         {
             "images": images,
-            "sources": sources,
+            "sources": all_sources,
             "current_source": source_filter or "All",
             "settings": settings,
         }
@@ -133,12 +133,12 @@ async def volumes_view(request: Request, session: Session = Depends(get_session)
         if source_filter and source_filter != "All":
             volumes = [v for v in volumes if v.source == source_filter]
             
-        sources = sorted(list(set([v.source for v in volumes] + ["Local"])))
+        all_sources = ["Local"] # Volumes are always local for now
         
     except Exception as e:
         logger.error(f"Failed to fetch volumes for view: {str(e)}")
         volumes = []
-        sources = ["Local"]
+        all_sources = ["Local"]
         settings = None
         
     return templates.TemplateResponse(
@@ -146,7 +146,7 @@ async def volumes_view(request: Request, session: Session = Depends(get_session)
         "volumes.html",
         {
             "volumes": volumes,
-            "sources": sources,
+            "sources": all_sources,
             "current_source": source_filter or "All",
             "settings": settings,
         }
@@ -255,7 +255,7 @@ from app.core.security import encrypt_secret
 
 
 @router.post("/registries/test", response_class=HTMLResponse)
-async def test_registry_connection(request: Request):
+async def test_registry_connection(request: Request, session: Session = Depends(get_session)):
     """Test connection to a registry before saving"""
     try:
         form_data = await request.form()
@@ -266,13 +266,27 @@ async def test_registry_connection(request: Request):
         username = str(form_data.get("username", "")).strip() or None
         password = str(form_data.get("password", "")).strip() or None
         
-        # Create a temporary config object (not saved to DB)
+        # Check if we are testing an existing registry (reg_id in form)
+        # We need to add a hidden input for reg_id in the edit form for this to work
+        reg_id = form_data.get("reg_id")
+        
+        # Logic: If password is empty AND we have a reg_id, fetch existing password from DB
+        encrypted_password = None
+        if password:
+            encrypted_password = encrypt_secret(password)
+        elif reg_id:
+            # Try to fetch existing password
+            existing_reg = session.get(RegistryConfig, int(reg_id))
+            if existing_reg and existing_reg.password:
+                encrypted_password = existing_reg.password
+        
+        # Create a temporary config object
         temp_config = RegistryConfig(
             name=name,
             type=RegistryType(reg_type),
             endpoint=endpoint,
             username=username,
-            password=encrypt_secret(password) if password else None
+            password=encrypted_password
         )
         
         # Instantiate client and test
@@ -691,6 +705,76 @@ async def restore_image(digest: str, response: Response, session: Session = Depe
     except Exception as e:
         logger.error(f"Restore failed: {str(e)}")
         return HTMLResponse(content=f"Error: {str(e)}", status_code=500)
+@router.delete("/images/batch", response_class=HTMLResponse)
+async def batch_delete_images(request: Request, session: Session = Depends(get_session)):
+    """Batch delete selected images"""
+    try:
+        form_data = await request.form()
+        # Form values are "digest|source" if we update frontend, but currently just digest from scan endpoint
+        # The frontend update I made sends value="{{ image.digest }}|{{ image.source }}"
+        
+        selected = form_data.getlist("selected_images")
+        
+        if not selected:
+            response = HTMLResponse(content="")
+            response.headers["HX-Trigger"] = '{"showMessage": {"message": "No images selected", "type": "error"}}'
+            return response
+            
+        success_count = 0
+        fail_count = 0
+        
+        # We need clients for all active registries
+        local_client = RegistryClientFactory.get_client()
+        remote_configs = session.exec(select(RegistryConfig).where(RegistryConfig.is_active == True)).all()
+        remote_clients = {conf.name: RegistryClientFactory.get_client(conf) for conf in remote_configs}
+        
+        for item in selected:
+            # Parse value: "digest|source" or just "digest" (legacy)
+            if "|" in item:
+                digest, source = item.split("|", 1)
+            else:
+                digest = item
+                source = "Local"
+                
+            try:
+                # Select correct client
+                if source == "Local":
+                    client = local_client
+                else:
+                    client = remote_clients.get(source)
+                    if not client:
+                        logger.warning(f"No client found for source: {source}")
+                        fail_count += 1
+                        continue
+                        
+                # Perform deletion
+                result = client.delete_image(session, digest, dry_run=False, force=True)
+                if result["success"]:
+                    success_count += 1
+                else:
+                    fail_count += 1
+                    logger.warning(f"Failed to delete {digest}: {result['message']}")
+                    
+            except Exception as e:
+                logger.error(f"Error deleting {digest}: {e}")
+                fail_count += 1
+        
+        session.commit()
+        
+        # Trigger reload of the table or just show message
+        # Ideally we refresh the whole list to reflect changes
+        # But HTMX expects a snippet to replace target.
+        # Since we targeted #image-table, we should re-render the table.
+        
+        return await images_view(request, session)
+        
+    except Exception as e:
+        logger.error(f"Batch delete failed: {e}")
+        return HTMLResponse(
+            content=f'<div class="alert error">Batch deletion failed: {escape(str(e))}</div>',
+            status_code=500
+        )
+
 @router.delete("/images/{digest}", response_class=HTMLResponse)
 async def purge_image(digest: str, response: Response, session: Session = Depends(get_session)):
     """Purge (permanently delete) a Docker image"""

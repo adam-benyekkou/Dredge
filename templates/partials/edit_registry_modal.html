@@ -5,12 +5,15 @@
             <h3>Edit Registry: {{ registry.name }}</h3>
         </header>
         <form hx-put="/registries/{{ registry.id }}" hx-target="#registries-list" hx-swap="innerHTML" onsubmit="this.closest('dialog').remove()">
+            <!-- Hidden ID for Test Connection context -->
+            <input type="hidden" name="reg_id" value="{{ registry.id }}">
+            
             <label for="edit-name">Friendly Name
                 <input type="text" id="edit-name" name="name" value="{{ registry.name }}" required>
             </label>
 
             <label for="edit-type">Registry Provider
-                <select id="edit-type" name="type" required>
+                <select id="edit-type" name="type" required onchange="updateFormFields(this)">
                     <option value="DOCKERHUB" {% if registry.type.value == 'DOCKERHUB' %}selected{% endif %}>Docker Hub</option>
                     <option value="GHCR" {% if registry.type.value == 'GHCR' %}selected{% endif %}>GitHub Container Registry</option>
                     <option value="ECR" {% if registry.type.value == 'ECR' %}selected{% endif %}>Amazon ECR</option>
@@ -21,19 +24,32 @@
                 </select>
             </label>
 
-            <label for="edit-endpoint">Endpoint (Optional)
-                <input type="text" id="edit-endpoint" name="endpoint" value="{{ registry.endpoint or '' }}" placeholder="e.g. index.docker.io/v1/">
-                <small>Leave empty for default provider endpoints.</small>
-            </label>
+            <div id="endpoint-container" style="display: none;">
+                <label for="edit-endpoint">Endpoint URL
+                    <input type="text" id="edit-endpoint" name="endpoint" value="{{ registry.endpoint or '' }}" placeholder="e.g. index.docker.io/v1/">
+                    <small>Required for custom or cloud-specific endpoints.</small>
+                </label>
+            </div>
 
             <div class="grid">
-                <label for="edit-username">Username
+                <label for="edit-username">
+                    <span id="username-label">Username</span>
                     <input type="text" id="edit-username" name="username" value="{{ registry.username or '' }}" placeholder="Username / Access Key">
                 </label>
-                <label for="edit-password">Password / Token
+                <label for="edit-password">
+                    <span id="password-label">Password / Token</span>
                     <input type="password" id="edit-password" name="password" placeholder="•••••••• (Leave empty to keep)">
                 </label>
             </div>
+
+            <!-- Init updateFormFields on load -->
+            <script>
+                // We use a slight timeout or direct execution to ensure the form is in DOM
+                setTimeout(() => {
+                    const select = document.getElementById('edit-type');
+                    if(select) updateFormFields(select);
+                }, 10);
+            </script>
 
             <!-- Test Connection Result Area -->
             <div id="edit-test-connection-result"></div>
