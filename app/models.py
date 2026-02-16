@@ -178,7 +178,9 @@ class AppSettings(SQLModel, table=True):
     
     id: int = Field(default=1, primary_key=True)
     provider_name: str = Field(default="AWS", max_length=100)
-    custom_price_per_gb: float = Field(default=0.10)
+    custom_price_per_gb: float = Field(default=0.10) # Local / ECR / Default
+    dockerhub_price_per_gb: float = Field(default=0.00) # Usually free for public, paid for private
+    ghcr_price_per_gb: float = Field(default=0.00) # GitHub Storage
     currency_symbol: str = Field(default="$", max_length=5)
     notification_urls: Optional[str] = Field(default=None, max_length=1000)
     updated_at: datetime = Field(default_factory=datetime.utcnow)

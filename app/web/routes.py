@@ -469,22 +469,43 @@ async def update_settings(request: Request, session: Session = Depends(get_sessi
     settings = session.get(AppSettings, 1)
     section = str(form_data.get("section", "finops"))
     
-    if settings:
-        if section == "finops":
-            settings.provider_name = str(form_data.get("provider_name"))
-            settings.custom_price_per_gb = float(form_data.get("custom_price_per_gb", 0.10))
-            settings.currency_symbol = str(form_data.get("currency_symbol", "$"))
-        elif section == "notifications":
-            settings.notification_urls = str(form_data.get("notification_urls", "")).strip() or None
-            
-        settings.updated_at = datetime.utcnow()
+    if not settings:
+        settings = AppSettings(id=1)
         session.add(settings)
-        session.commit()
+    
+    if section == "finops":
+        settings.provider_name = str(form_data.get("provider_name", "AWS"))
+        settings.currency_symbol = str(form_data.get("currency_symbol", "$"))
+        try:
+            settings.custom_price_per_gb = float(form_data.get("custom_price_per_gb", 0.10))
+        except (ValueError, TypeError):
+            settings.custom_price_per_gb = 0.10
+            
+        try:
+            settings.dockerhub_price_per_gb = float(form_data.get("dockerhub_price_per_gb", 0.00))
+        except (ValueError, TypeError):
+            settings.dockerhub_price_per_gb = 0.00
+            
+        try:
+            settings.ghcr_price_per_gb = float(form_data.get("ghcr_price_per_gb", 0.00))
+        except (ValueError, TypeError):
+            settings.ghcr_price_per_gb = 0.00
+            
+    elif section == "notifications":
+        settings.notification_urls = str(form_data.get("notification_urls", "")).strip() or None
         
-    return templates.TemplateResponse(
+    settings.updated_at = datetime.utcnow()
+    session.add(settings)
+    session.commit()
+    session.refresh(settings)
+        
+    response = templates.TemplateResponse(
+        request,
         f"partials/settings_{section}.html",
         {"settings": settings, "updated": True, "section": section}
     )
+    response.headers["HX-Trigger"] = '{"showMessage": {"message": "Settings Saved", "type": "success"}}'
+    return response
 
 
 @router.post("/settings/reset", response_class=HTMLResponse)
@@ -583,12 +604,34 @@ async def scan_images(request: Request, response: Response, session: Session = D
         # Initialize Docker client
         client = RegistryClientFactory.get_client()
         
-        # Get all images
-        images = client.list_images()
+        # Get settings for cost calc
+        settings = session.get(AppSettings, 1)
+        
+        # Get all images (Need to use same logic as images_view for full list)
+        # 1. Local
+        local_client = RegistryClientFactory.get_client()
+        images = local_client.list_images()
+        
+        # 2. Remote
+        remote_configs = session.exec(select(RegistryConfig).where(RegistryConfig.is_active == True)).all()
+        for config in remote_configs:
+            try:
+                remote_client = RegistryClientFactory.get_client(config)
+                images.extend(remote_client.list_images())
+            except Exception as re:
+                logger.error(f"Failed to fetch images from registry {config.name}: {str(re)}")
         
         # Calculate total stats
         total_size_bytes = sum(img.size_bytes for img in images)
-        total_cost = CostCalculator.calculate_monthly_cost(total_size_bytes)
+        # For total cost, we need to apply per-image cost logic
+        total_cost = 0.0
+        for img in images:
+            price_per_gb = settings.custom_price_per_gb
+            if img.source in ["Docker Hub", "DOCKERHUB"]:
+                price_per_gb = settings.dockerhub_price_per_gb
+            elif img.source in ["GitHub Packages", "GHCR"]:
+                price_per_gb = settings.ghcr_price_per_gb
+            total_cost += (img.size_bytes / (1024**3)) * price_per_gb
         
         # Trigger Toast
         response.headers["HX-Trigger"] = '{"showMessage": "Scan Complete: ' + f'{total_size_bytes / (1024**3):.2f} GB' + ' analyzed"}'
@@ -608,7 +651,15 @@ async def scan_images(request: Request, response: Response, session: Session = D
             tag = escape(img.tags[0].split(':')[1] if ':' in (img.tags[0] if img.tags else '') else 'latest')
             digest_escaped = escape(img.digest)
             size_gb = img.size_bytes / (1024 ** 3)
-            cost = CostCalculator.calculate_monthly_cost(img.size_bytes)
+            
+            # COST CALCULATION LOGIC
+            price_per_gb = settings.custom_price_per_gb
+            if img.source in ["Docker Hub", "DOCKERHUB"]:
+                price_per_gb = settings.dockerhub_price_per_gb
+            elif img.source in ["GitHub Packages", "GHCR"]:
+                price_per_gb = settings.ghcr_price_per_gb
+            cost = size_gb * price_per_gb
+            
             created = escape(img.created_at.strftime('%Y-%m-%d %H:%M') if img.created_at else 'N/A')
             
             # Status badge logic
@@ -620,9 +671,10 @@ async def scan_images(request: Request, response: Response, session: Session = D
             
             html_rows.append(f"""
                 <tr id="{row_id}">
-                    <td><input type="checkbox" name="image-select" value="{digest_escaped}"></td>
+                    <td><input type="checkbox" name="selected_images" value="{digest_escaped}|{img.source}" form="batch-form"></td>
                     <td>{repo}</td>
                     <td>{tag}</td>
+                    <td><span class="tag-pill">{escape(img.source)}</span></td>
                     <td>{size_gb:.2f} GB</td>
                     <td>{created}</td>
                     <td><span class="badge {status_class}">{status.value}</span></td>
@@ -643,12 +695,37 @@ async def scan_images(request: Request, response: Response, session: Session = D
         
         result_html = f"""
             <div class="images-table">
+                <script>
+                    // Re-init checkbox logic after scan
+                    document.addEventListener('DOMContentLoaded', () => {{
+                        const selectAll = document.getElementById('select-all');
+                        const checkboxes = document.querySelectorAll('input[name="selected_images"]');
+                        const batchBtn = document.getElementById('batch-delete-btn');
+                        
+                        function updateBatchBtn() {{
+                            const checkedCount = document.querySelectorAll('input[name="selected_images"]:checked').length;
+                            if(batchBtn) batchBtn.style.display = checkedCount > 0 ? 'inline-block' : 'none';
+                        }}
+
+                        if (selectAll) {{
+                            selectAll.addEventListener('change', (e) => {{
+                                checkboxes.forEach(cb => cb.checked = e.target.checked);
+                                updateBatchBtn();
+                            }});
+                        }}
+
+                        checkboxes.forEach(cb => {{
+                            cb.addEventListener('change', updateBatchBtn);
+                        }});
+                    }});
+                </script>
                 <table>
                     <thead>
                         <tr>
                             <th><input type="checkbox" id="select-all"></th>
                             <th>Repository</th>
                             <th>Tag</th>
+                            <th>Source</th>
                             <th>Size</th>
                             <th>Created</th>
                             <th>Status</th>

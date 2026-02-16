@@ -17,8 +17,9 @@
         </label>
 
         <div class="grid">
-            <label for="custom_price_per_gb">Price per GB / Month
+            <label for="custom_price_per_gb">Default / Local Price per GB
                 <input type="number" id="custom_price_per_gb" name="custom_price_per_gb" step="0.01" value="{{ settings.custom_price_per_gb }}">
+                <small>Used for Local and ECR/GCR/ACR</small>
             </label>
             <label for="currency_symbol">Currency
                 <select id="currency_symbol" name="currency_symbol">
@@ -26,6 +27,17 @@
                     <option value="€" {% if settings.currency_symbol == '€' %}selected{% endif %}>EUR (€)</option>
                     <option value="£" {% if settings.currency_symbol == '£' %}selected{% endif %}>GBP (£)</option>
                 </select>
+            </label>
+        </div>
+
+        <div class="grid" style="margin-top: 1rem;">
+            <label for="dockerhub_price_per_gb">Docker Hub Price per GB
+                <input type="number" id="dockerhub_price_per_gb" name="dockerhub_price_per_gb" step="0.01" value="{{ settings.dockerhub_price_per_gb }}">
+                <small>Normally free for public, varies for private</small>
+            </label>
+            <label for="ghcr_price_per_gb">GitHub Packages Price per GB
+                <input type="number" id="ghcr_price_per_gb" name="ghcr_price_per_gb" step="0.01" value="{{ settings.ghcr_price_per_gb }}">
+                <small>GitHub Storage pricing</small>
             </label>
         </div>
 
