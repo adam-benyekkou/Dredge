@@ -21,11 +21,12 @@ A powerful, nautical-themed platform for managing Docker infrastructure costs an
 
 ### Key Features
 
-- 💰 **Cost Visibility** - Real-time calculation of monthly storage costs across AWS, Azure, and GCP
-- 🔍 **Multi-Registry Support** - Scan local Docker and remote registries (Hub, ECR, ACR, GAR)
-- 📊 **FinOps Dashboard** - Track waste, efficiency scores, and reclaimable space
-- 🗑️ **Safe Cleanup** - Quarantine mode and automated lifecycle policies
-- 🎨 **Deep Harbor UI** - Beautiful dark nautical theme for long monitoring sessions
+- 💰 **Cost Visibility** - Real-time calculation of monthly storage costs with provider-specific pricing (Docker Hub, GHCR, etc.)
+- 🔍 **Multi-Registry Support** - Real API integration for scanning and deleting images from Local Docker, Docker Hub, and GHCR.
+- 📊 **FinOps Dashboard** - Track waste, efficiency scores, and reclaimable space with lazy-loaded, high-performance views.
+- 🗑️ **Mass Cleanup** - Batch delete images across multiple registries with asynchronous background processing.
+- 🛡️ **Lifecycle Policies** - Automated quarantine logic based on image age and count per repository.
+- 🎨 **Deep Harbor UI** - Beautiful dark nautical theme with real-time toast notifications and interactive forms.
 
 ## 🛠️ Tech Stack
 

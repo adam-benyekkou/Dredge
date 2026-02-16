@@ -172,7 +172,10 @@ class RegistryConfig(SQLModel, table=True):
 
 from passlib.context import CryptContext
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# Use PBKDF2-SHA256 which is secure and avoids the bcrypt compatibility bug
+# that causes "password cannot be longer than 72 bytes" even with short passwords
+# in some passlib/bcrypt version combinations.
+pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 
 def hash_password(password: str) -> str:
     return pwd_context.hash(password)
