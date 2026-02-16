@@ -11,7 +11,7 @@ A powerful, nautical-themed platform for managing Docker infrastructure costs an
 [![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)
 
-[📖 Documentation](https://adam-benyekkou.github.io/Dredge/) • [🚀 Quick Start](#-quick-start) • [💻 GitHub](https://github.com/adam-benyekkou/Dredge)
+[📖 Documentation](https://adam-benyekkou.github.io/Dredge/) • [Quick Start](#quick-start) • [💻 GitHub](https://github.com/adam-benyekkou/Dredge)
 
 </div>
 
@@ -33,7 +33,7 @@ A powerful, nautical-themed platform for managing Docker infrastructure costs an
 **Frontend:** HTMX • Jinja2 • Custom CSS (Deep Harbor theme)  
 **Infrastructure:** Docker • Docker Compose • SQLite
 
-## 🚀 Quick Start
+## Quick Start
 
 ```bash
 git clone https://github.com/adam-benyekkou/Dredge.git
@@ -54,12 +54,12 @@ For comprehensive guides, API reference, and deployment instructions, visit:
 ### [📖 https://adam-benyekkou.github.io/Dredge/](https://adam-benyekkou.github.io/Dredge/)
 
 **What's in the docs:**
-- 🚀 Getting Started Guide
-- 🔧 Configuration & Environment Setup
-- 🌐 Registry Provider Setup (AWS ECR, GCP GAR, Docker Hub, etc.)
-- 📊 Core Concepts (Images, Volumes, Policies, FinOps)
-- 🚢 Production Deployment Guide
-- 📖 API Reference
+- Getting Started Guide
+- Configuration & Environment Setup
+- Registry Provider Setup (AWS ECR, GCP GAR, Docker Hub, etc.)
+- Core Concepts (Images, Volumes, Policies, FinOps)
+- Production Deployment Guide
+- API Reference
 
 ## 📄 License
 
