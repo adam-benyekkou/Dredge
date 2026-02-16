@@ -41,6 +41,14 @@
             </label>
         </div>
 
+        <div class="grid" style="margin-top: 1rem;">
+            <label for="github_hrc_price_per_gb">GitHub HRC Price per GB
+                <input type="number" id="github_hrc_price_per_gb" name="github_hrc_price_per_gb" step="0.01" value="{{ settings.github_hrc_price_per_gb }}">
+                <small>GitHub Hosted Runner Controller pricing</small>
+            </label>
+            <div style="flex: 1;"></div>
+        </div>
+
         <footer style="margin-top: 1rem;">
             <button type="submit" class="primary">Save Configuration</button>
             {% if updated %}

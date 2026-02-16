@@ -79,7 +79,7 @@
                             {{ image.status.value }}
                         </span>
                     </td>
-                    <td style="text-align: right;">{{ settings.currency_symbol }}{{ (image.size_bytes / 1024**3 * (settings.dockerhub_price_per_gb if image.source == 'Docker Hub' else (settings.ghcr_price_per_gb if image.source == 'GitHub Packages' else settings.custom_price_per_gb)))|round(2) }}/mo</td>
+                    <td style="text-align: right;">{{ settings.currency_symbol }}{{ (image.size_bytes / 1024**3 * (settings.dockerhub_price_per_gb if image.source == 'Docker Hub' else (settings.ghcr_price_per_gb if image.source == 'GitHub Packages' else (settings.github_hrc_price_per_gb if image.source == 'GitHub HRC' else settings.custom_price_per_gb))))|round(2) }}/mo</td>
                     <td>
                         <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
                             {% if image.status == 'QUARANTINED' %}

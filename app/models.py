@@ -170,6 +170,16 @@ class RegistryConfig(SQLModel, table=True):
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 
+from passlib.context import CryptContext
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+def hash_password(password: str) -> str:
+    return pwd_context.hash(password)
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    return pwd_context.verify(plain_password, hashed_password)
+
 class AppSettings(SQLModel, table=True):
     """Global application settings for FinOps and UI.
     
@@ -177,10 +187,13 @@ class AppSettings(SQLModel, table=True):
     """
     
     id: int = Field(default=1, primary_key=True)
+    admin_username: str = Field(default="admin", max_length=100)
+    admin_password: str = Field(default="admin", max_length=255) # Hashed password
     provider_name: str = Field(default="AWS", max_length=100)
     custom_price_per_gb: float = Field(default=0.10) # Local / ECR / Default
     dockerhub_price_per_gb: float = Field(default=0.00) # Usually free for public, paid for private
     ghcr_price_per_gb: float = Field(default=0.00) # GitHub Storage
+    github_hrc_price_per_gb: float = Field(default=0.00) # GitHub HRC Pricing
     currency_symbol: str = Field(default="$", max_length=5)
     notification_urls: Optional[str] = Field(default=None, max_length=1000)
     updated_at: datetime = Field(default_factory=datetime.utcnow)

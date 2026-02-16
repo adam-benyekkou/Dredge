@@ -1,6 +1,7 @@
 """API routes for Dredge"""
 
 from html import escape
+from typing import List
 from datetime import datetime
 from fastapi import APIRouter, Request, Depends, HTTPException, Response
 from fastapi.responses import HTMLResponse
@@ -44,14 +45,24 @@ async def dashboard(request: Request, session: Session = Depends(get_session)):
         
         total_images = len(images)
         total_volumes = len(volumes)
-        total_image_bytes = sum(img.size_bytes for img in images)
-        total_volume_bytes = sum(vol.size_bytes for vol in volumes)
-        total_bytes = total_image_bytes + total_volume_bytes
+        
+        # Calculate real metrics using specific source prices
+        monthly_waste = 0
+        total_bytes = 0
+        
+        for img in images:
+            total_bytes += img.size_bytes
+            monthly_waste += CostCalculator.calculate_monthly_cost(img.size_bytes, img.source)
+            
+        for vol in volumes:
+            total_bytes += vol.size_bytes
+            monthly_waste += CostCalculator.calculate_monthly_cost(vol.size_bytes, vol.source)
         
         if total_bytes > 0:
             has_scanned = True
             reclaimable_gb = total_bytes / (1024 ** 3)
-            monthly_waste = CostCalculator.calculate_monthly_cost(total_bytes)
+            # monthly_waste already calculated above
+            
             # Simple efficiency calculation (100% if nothing to clean, lower if there's waste)
             efficiency = 100
     except Exception as e:
@@ -483,8 +494,20 @@ async def update_settings(request: Request, session: Session = Depends(get_sessi
         except (ValueError, TypeError):
             settings.ghcr_price_per_gb = 0.00
             
+        try:
+            settings.github_hrc_price_per_gb = float(form_data.get("github_hrc_price_per_gb", 0.00))
+        except (ValueError, TypeError):
+            settings.github_hrc_price_per_gb = 0.00
+            
     elif section == "notifications":
         settings.notification_urls = str(form_data.get("notification_urls", "")).strip() or None
+        
+    elif section == "general":
+        settings.admin_username = str(form_data.get("admin_username", "admin")).strip()
+        new_password = str(form_data.get("admin_password", "")).strip()
+        if new_password:
+            from app.models import hash_password
+            settings.admin_password = hash_password(new_password)
         
     settings.updated_at = datetime.utcnow()
     session.add(settings)
@@ -506,6 +529,17 @@ async def reset_database(request: Request, session: Session = Depends(get_sessio
     # Logic to flush tables could go here
     # For MVP just return success message
     return HTMLResponse(content="<p style='color: var(--danger);'>Database reset not fully implemented for safety.</p>")
+
+
+@router.post("/auth/logout", response_class=HTMLResponse)
+async def logout(response: Response):
+    """Logout by clearing the access_token cookie"""
+    response.delete_cookie("access_token")
+    # Redirect to home or return a trigger to reload/redirect
+    return HTMLResponse(
+        content="<script>window.location.reload();</script>",
+        headers={"HX-Trigger": '{"showMessage": {"message": "Logged out successfully", "type": "info"}}'}
+    )
 
 
 @router.post("/settings/notify-test", response_class=HTMLResponse)
@@ -532,11 +566,19 @@ async def scan_dashboard(request: Request, response: Response, session: Session 
         # Calculate metrics
         total_images = len(images)
         total_volumes = len(volumes)
-        total_image_bytes = sum(img.size_bytes for img in images)
-        total_volume_bytes = sum(vol.size_bytes for vol in volumes)
-        total_bytes = total_image_bytes + total_volume_bytes
+        
+        total_bytes = 0
+        monthly_cost = 0
+        
+        for img in images:
+            total_bytes += img.size_bytes
+            monthly_cost += CostCalculator.calculate_monthly_cost(img.size_bytes, img.source)
+            
+        for vol in volumes:
+            total_bytes += vol.size_bytes
+            monthly_cost += CostCalculator.calculate_monthly_cost(vol.size_bytes, vol.source)
+            
         total_gb = total_bytes / (1024 ** 3)
-        monthly_cost = CostCalculator.calculate_monthly_cost(total_bytes)
         
         # Get settings for currency
         settings = session.get(AppSettings, 1)
@@ -705,7 +747,7 @@ async def restore_image(digest: str, response: Response, session: Session = Depe
         logger.error(f"Restore failed: {str(e)}")
         return HTMLResponse(content=f"Error: {str(e)}", status_code=500)
 
-async def process_batch_deletion(selected_items: List[str], session: Session):
+async def process_batch_deletion(selected_items: list[str], session: Session):
     """Background task for processing batch deletions"""
     try:
         success_count = 0
@@ -761,6 +803,9 @@ async def process_batch_deletion(selected_items: List[str], session: Session):
             
             bg_session.commit()
             logger.info(f"Batch delete complete: {success_count} success, {fail_count} failed")
+            
+    except Exception as e:
+        logger.error(f"Background batch deletion failed: {e}", exc_info=True)
 
 from fastapi import BackgroundTasks
 

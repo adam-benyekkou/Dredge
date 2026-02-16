@@ -94,8 +94,14 @@ class PolicyEnforcer:
         # Analyze each repo
         for repo_key, artifacts in repos.items():
             # Sort by creation date (newest first)
-            # Handle missing dates
-            artifacts.sort(key=lambda x: x.created_at or datetime.min, reverse=True)
+            # Ensure all are naive for sorting to prevent TypeError
+            def get_sort_date(x):
+                d = x.created_at or datetime.min
+                if d.tzinfo is not None:
+                    d = d.replace(tzinfo=None)
+                return d
+
+            artifacts.sort(key=get_sort_date, reverse=True)
             
             # Whitelist Check
             if policy.regex_whitelist:
@@ -115,7 +121,14 @@ class PolicyEnforcer:
                 
                 # Rule 2: Max Age
                 if policy.max_age_days > 0:
-                    age = datetime.utcnow() - (img.created_at or datetime.utcnow())
+                    now = datetime.utcnow()
+                    created_at = img.created_at or now
+                    
+                    # Ensure both are naive for comparison
+                    if created_at.tzinfo is not None:
+                        created_at = created_at.replace(tzinfo=None)
+                    
+                    age = now - created_at
                     if age.days > policy.max_age_days:
                         should_quarantine = True
                 
@@ -137,6 +150,11 @@ class PolicyEnforcer:
 
     def _quarantine_image(self, image: ImageArtifact, policy: CleanupPolicy):
         """Mark image as quarantined in DB."""
+        # Ensure created_at is naive for DB storage if that's the convention
+        created_at = image.created_at
+        if created_at and created_at.tzinfo is not None:
+            created_at = created_at.replace(tzinfo=None)
+
         # Check if already in DB
         db_image = self.session.exec(select(ImageArtifact).where(ImageArtifact.digest == image.digest)).first()
         
@@ -145,13 +163,14 @@ class PolicyEnforcer:
             db_image = ImageArtifact(
                 tags=image.tags,
                 size_bytes=image.size_bytes,
-                created_at=image.created_at,
+                created_at=created_at,
                 digest=image.digest,
                 source=image.source,
                 status=ImageStatus.QUARANTINED
             )
         else:
             db_image.status = ImageStatus.QUARANTINED
+            db_image.created_at = created_at # Update in case it was different
             
         # Set expiry (e.g., 24h from now)
         db_image.expires_at = datetime.utcnow() + timedelta(hours=24)

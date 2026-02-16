@@ -28,10 +28,14 @@ def init_db():
     SQLModel.metadata.create_all(engine)
     
     # Initialize default settings
-    from app.models import AppSettings
+    from app.models import AppSettings, hash_password
     with Session(engine) as session:
         if not session.get(AppSettings, 1):
-            settings = AppSettings(id=1)
+            settings = AppSettings(
+                id=1,
+                admin_username="admin",
+                admin_password=hash_password("admin")
+            )
             session.add(settings)
             session.commit()
 

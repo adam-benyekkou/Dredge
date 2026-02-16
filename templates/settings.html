@@ -82,6 +82,16 @@
         <nav>
             <ul class="settings-nav-list">
                 <li>
+                    <a class="settings-nav-item {% if section == 'general' %}active{% endif %}"
+                       hx-get="/settings?section=general"
+                       hx-target="#settings-content"
+                       hx-push-url="true"
+                       onclick="updateActiveNav(this)">
+                        <i data-lucide="user"></i>
+                        General
+                    </a>
+                </li>
+                <li>
                     <a class="settings-nav-item {% if section == 'finops' %}active{% endif %}"
                        hx-get="/settings?section=finops"
                        hx-target="#settings-content"

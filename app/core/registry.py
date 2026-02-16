@@ -117,7 +117,7 @@ class LocalDockerClient(BaseRegistryClient):
                     created_at=datetime.fromisoformat(
                         img.attrs.get('Created', datetime.utcnow().isoformat()).replace('Z', '+00:00')
                     ),
-                    digest=img.id,
+                    digest=img.id or "unknown",
                     source="Local"
                 )
                 artifacts.append(artifact)
@@ -228,10 +228,10 @@ class LocalDockerClient(BaseRegistryClient):
             img = self.client.images.get(image_id)
             image_tags = img.tags if img.tags else [f"<none>:{img.short_id}"]
             size_bytes = img.attrs.get('Size', 0)
-            actual_digest = img.id
+            actual_digest = img.id or "unknown"
             
             # Calculate cost savings
-            monthly_cost = CostCalculator.calculate_monthly_cost(size_bytes)
+            monthly_cost = CostCalculator.calculate_monthly_cost(size_bytes, source=img.attrs.get('Source', 'Local'))
             
             result = {
                 "success": True,
@@ -421,7 +421,7 @@ class LocalDockerClient(BaseRegistryClient):
                 logger.warning(f"Could not retrieve volume size for {name} from df: {e}")
                 pass
                 
-            savings_usd = CostCalculator.calculate_monthly_cost(size_bytes)
+            savings_usd = CostCalculator.calculate_monthly_cost(size_bytes, source=v.attrs.get('Source', 'Local'))
             
             # Remove volume
             v.remove(force=force)
@@ -708,8 +708,39 @@ class DockerRegistryClient(BaseRegistryClient):
                                 continue # Skip untagged images
                             
                             # Size is not always in package metadata, sometimes need manifest
-                            # For MVP we default to 0 if not found
-                            size = 0 
+                            # Fetch size via OCI Registry API (v2)
+                            size = 0
+                            try:
+                                # GHCR registry endpoint is ghcr.io
+                                repo_path = full_name
+                                # Use the first tag to fetch the manifest for size
+                                first_tag = tags[0]
+                                manifest_url = f"https://ghcr.io/v2/{repo_path}/manifests/{first_tag}"
+                                
+                                # We need a registry token (different from GitHub API auth)
+                                # The GitHub PAT works as password for the registry as well
+                                reg_auth = (self.username, self.password)
+                                
+                                # 1. Get token
+                                token_url = f"https://ghcr.io/token?scope=repository:{repo_path}:pull&service=ghcr.io"
+                                token_resp = requests.get(token_url, auth=reg_auth, timeout=5)
+                                if token_resp.status_code == 200:
+                                    reg_token = token_resp.json().get("token")
+                                    
+                                    # 2. Get manifest
+                                    headers = {
+                                        "Authorization": f"Bearer {reg_token}",
+                                        "Accept": "application/vnd.docker.distribution.manifest.v2+json"
+                                    }
+                                    m_resp = requests.get(manifest_url, headers=headers, timeout=5)
+                                    if m_resp.status_code == 200:
+                                        m_data = m_resp.json()
+                                        # Sum up layer sizes
+                                        size = sum(layer.get("size", 0) for layer in m_data.get("layers", []))
+                                        # Add config size if present
+                                        size += m_data.get("config", {}).get("size", 0)
+                            except Exception as e:
+                                logger.warning(f"Failed to fetch manifest size for {full_name}: {e}")
                             
                             created_at_str = ver.get("created_at")
                             if created_at_str:

@@ -1,0 +1,26 @@
+<div class="card">
+    <header>
+        <h3 style="margin-bottom: 0;">General Settings</h3>
+        <p style="color: var(--text-muted); font-size: 0.9rem;">Manage administrator credentials and global access.</p>
+    </header>
+    
+    <form hx-post="/settings" hx-target="#settings-content" hx-push-url="false">
+        <input type="hidden" name="section" value="general">
+        
+        <label for="admin_username">Admin Username
+            <input type="text" id="admin_username" name="admin_username" value="{{ settings.admin_username }}" required>
+        </label>
+
+        <label for="admin_password">Admin Password
+            <input type="password" id="admin_password" name="admin_password" placeholder="Leave empty to keep current">
+            <small>Changing the password will require you to log in again with the new credentials.</small>
+        </label>
+
+        <footer style="margin-top: 1rem;">
+            <button type="submit" class="primary">Update Credentials</button>
+            {% if updated %}
+                <span style="color: #2ECC71; margin-left: 1rem; font-size: 0.9rem;">✓ Credentials updated</span>
+            {% endif %}
+        </footer>
+    </form>
+</div>

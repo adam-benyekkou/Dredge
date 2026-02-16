@@ -12,14 +12,14 @@ class CostCalculator:
     def calculate_monthly_cost(
         cls,
         size_bytes: int,
-        provider: str = None
+        source: str = "Local"
     ) -> float:
         """
         Calculate monthly storage cost for a given size.
         
         Args:
             size_bytes: Size in bytes
-            provider: Cloud provider (optional override)
+            source: Image source (e.g., 'Local', 'Docker Hub', 'GHCR')
             
         Returns:
             Monthly cost in configured currency
@@ -31,8 +31,16 @@ class CostCalculator:
         with Session(engine) as session:
             settings = session.get(AppSettings, 1)
             if not settings:
-                price_per_gb = 0.10
+                return size_gb * 0.10
+            
+            # Determine price based on source
+            if source == "Docker Hub":
+                price = settings.dockerhub_price_per_gb
+            elif source == "GitHub Packages" or source == "GHCR":
+                price = settings.ghcr_price_per_gb
+            elif source == "GitHub HRC":
+                price = settings.github_hrc_price_per_gb
             else:
-                price_per_gb = settings.custom_price_per_gb
-        
-        return size_gb * price_per_gb
+                price = settings.custom_price_per_gb
+                
+        return size_gb * price

@@ -22,12 +22,15 @@ async def test_health_check():
 
 
 @pytest.mark.asyncio
-async def test_images_page_renders():
-    """Test images page renders"""
+async def test_images_api_list():
+    """Test images API list endpoint"""
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        response = await client.get("/images")
+        response = await client.get("/api/v1/images/")
         assert response.status_code == 200
-        assert b"Images" in response.content
+        data = response.json()
+        assert isinstance(data, list)
+        assert len(data) > 0
+        assert data[0]["tags"] == ["nginx:latest"]
 
 
 @pytest.mark.asyncio
@@ -74,8 +77,9 @@ async def test_purge_image_endpoint():
 async def test_scan_endpoint():
     """Test scan endpoint returns image data"""
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        response = await client.post("/scan")
-        # Scan may fail if Docker is not available in test environment
-        # But endpoint should return valid HTML
-        assert response.status_code in [200, 500]
-        assert b"<" in response.content  # HTML content
+        # Update path to modular API
+        response = await client.post("/api/v1/images/scan")
+        # New modular endpoint returns JSON
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "accepted"

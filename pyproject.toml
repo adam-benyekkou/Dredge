@@ -19,6 +19,8 @@ dependencies = [
     "google-auth",
     "requests",
     "cryptography",
+    "python-jose[cryptography]",
+    "passlib[bcrypt]",
 ]
 
 [project.optional-dependencies]
