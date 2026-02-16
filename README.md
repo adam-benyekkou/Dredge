@@ -28,9 +28,8 @@ A powerful, nautical-themed platform for managing Docker infrastructure costs an
 - [Configuration](#-configuration)
 - [Development](#-development)
 - [Security](#-security)
-- [Roadmap](#-roadmap)
-- [Contributing](#-contributing)
 - [License](#-license)
+- [Acknowledgments](#-acknowledgments)
 
 ---
 
@@ -105,10 +104,6 @@ graph TB
     Registry -->|Unix Socket| Docker
     Docker -->|List/Inspect| Images
     API -->|Store Metadata| Models
-    
-    style UI fill:#48CAE4,stroke:#0077B6,stroke-width:2px,color:#000
-    style API fill:#0077B6,stroke:#005F8D,stroke-width:2px
-    style Docker fill:#2496ED,stroke:#1D7FBF,stroke-width:2px
 ```
 
 ### Data Flow
@@ -165,10 +160,6 @@ graph LR
     Routes --> FinOps
     Routes --> Models
     Registry --> Models
-    
-    style Registry fill:#0077B6,stroke:#005F8D,stroke-width:2px
-    style FinOps fill:#0096C7,stroke:#0077B6,stroke-width:2px
-    style Models fill:#48CAE4,stroke:#0096C7,stroke-width:2px,color:#000
 ```
 
 ---
@@ -201,7 +192,7 @@ graph LR
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
 Get Dredge running in under 60 seconds:
 
@@ -509,80 +500,6 @@ safety check
 4. Add rate limiting and authentication
 5. Enable HTTPS/TLS termination
 
-### Reporting Security Issues
-
-Please report security vulnerabilities via email to: **security@dredge.io**
-
-**DO NOT** create public GitHub issues for security vulnerabilities.
-
----
-
-## 🗺️ Roadmap
-
-### Phase 2: Alpha - The Reaper (Q2 2026)
-
-- [ ] Quarantine mode (24-hour grace period)
-- [ ] Cleanup policies (keep_count, max_age, regex)
-- [ ] Audit logging for all deletions
-- [ ] Manual purge with dry-run support
-
-### Phase 3: Beta - FinOps (Q3 2026)
-
-- [ ] Remote registry support (Docker Hub, ECR, GCR, ACR)
-- [ ] Advanced charts and visualizations
-- [ ] PDF report generation
-- [ ] Email/Slack notifications
-
-### Phase 4: Production (Q4 2026)
-
-- [ ] Multi-user authentication (OAuth2)
-- [ ] Role-based access control (RBAC)
-- [ ] Multi-registry dashboard
-- [ ] Cost optimization recommendations
-- [ ] Scheduled cleanup automation
-
----
-
-## 🤝 Contributing
-
-We welcome contributions! Please follow these guidelines:
-
-### Development Workflow
-
-1. **Fork** the repository
-2. **Create** a feature branch (`git checkout -b feature/amazing-feature`)
-3. **Commit** your changes using [Conventional Commits](https://www.conventionalcommits.org/)
-4. **Test** your changes (`pytest tests/`)
-5. **Push** to your branch (`git push origin feature/amazing-feature`)
-6. **Open** a Pull Request
-
-### Commit Message Format
-
-```
-<type>(<scope>): <subject>
-
-<body>
-```
-
-**Types:** feat, fix, docs, style, refactor, test, chore
-
-**Example:**
-```
-feat(finops): add GCP pricing support
-
-- Add GCP_PRICE_PER_GB constant
-- Update calculate_monthly_cost() to support GCP
-- Add unit tests for GCP pricing
-```
-
-### Code Style
-
-- Follow **PEP 8** guidelines
-- Use **type hints** everywhere
-- Write **docstrings** for all public functions
-- Maintain **100% test coverage** for new features
-- Pass **all linters** (ruff, mypy, bandit)
-
 ---
 
 ## 📄 License
@@ -597,14 +514,6 @@ This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) 
 - **Docker** for revolutionizing containerization
 - **FastAPI** for the incredible developer experience
 - **HTMX** for bringing interactivity back to the server
-
----
-
-## 📞 Contact & Support
-
-- **GitHub Issues**: [Report bugs or request features](https://github.com/adam-benyekkou/Dredge/issues)
-- **Email**: support@dredge.io
-- **Documentation**: [Full docs](https://docs.dredge.io) *(coming soon)*
 
 ---
 
