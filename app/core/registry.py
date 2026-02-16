@@ -3,13 +3,13 @@
 from abc import ABC, abstractmethod
 from typing import List
 import docker
-from docker.errors import APIError, ImageNotFound
+from docker.errors import APIError, ImageNotFound, NotFound
 from datetime import datetime
 import re
 import logging
 
 from sqlmodel import Session
-from app.models import ImageArtifact, AuditLog
+from app.models import ImageArtifact, AuditLog, VolumeArtifact, VolumeStatus
 from app.core.finops import CostCalculator
 
 logger = logging.getLogger(__name__)
@@ -37,6 +37,21 @@ class BaseRegistryClient(ABC):
         force: bool = False
     ) -> dict:
         """Delete an image with audit logging and dry-run support"""
+        pass
+
+    @abstractmethod
+    def list_volumes(self) -> List[VolumeArtifact]:
+        """List all volumes in the host/registry"""
+        pass
+
+    @abstractmethod
+    def delete_volume(
+        self,
+        session: Session,
+        name: str,
+        force: bool = False
+    ) -> dict:
+        """Delete a volume with audit logging"""
         pass
 
 
@@ -265,3 +280,143 @@ class LocalDockerClient(BaseRegistryClient):
         except Exception as e:
             logger.error(f"Unexpected error during deletion: {e}")
             raise RuntimeError(f"Failed to delete image: {e}")
+
+    def list_volumes(self) -> List[VolumeArtifact]:
+        """List all local Docker volumes with size information.
+        
+        Uses docker system df to retrieve volume usage and size data.
+        
+        Returns:
+            List of VolumeArtifact objects
+            
+        Raises:
+            RuntimeError: If Docker API call fails
+        """
+        try:
+            # Get volume data including size from system df
+            df_data = self.client.df()
+            volumes_info = df_data.get('Volumes', [])
+            
+            artifacts = []
+            for vol in volumes_info:
+                # Map volume info
+                name = vol.get('Name', 'unknown')
+                size_bytes = vol.get('UsageData', {}).get('Size', 0)
+                ref_count = vol.get('UsageData', {}).get('RefCount', 0)
+                
+                # Determine status
+                status = VolumeStatus.ACTIVE if ref_count > 0 else VolumeStatus.DANGLING
+                
+                # Get more details from individual volume inspection
+                try:
+                    v = self.client.volumes.get(name)
+                    created_at_str = v.attrs.get('CreatedAt')
+                    created_at = None
+                    if created_at_str:
+                        # Format: 2026-02-16T12:00:00Z or similar
+                        created_at = datetime.fromisoformat(
+                            created_at_str.replace('Z', '+00:00')
+                        )
+                    
+                    labels = [f"{k}={v}" for k, v in v.attrs.get('Labels', {}).items()]
+                    driver = v.attrs.get('Driver', 'local')
+                except Exception:
+                    created_at = None
+                    labels = []
+                    driver = 'local'
+
+                artifact = VolumeArtifact(
+                    name=name,
+                    driver=driver,
+                    size_bytes=size_bytes,
+                    created_at=created_at,
+                    status=status,
+                    labels=labels
+                )
+                artifacts.append(artifact)
+            
+            logger.info(f"Successfully listed {len(artifacts)} volumes")
+            return artifacts
+            
+        except APIError as e:
+            logger.error(f"Docker API error listing volumes: {e}")
+            raise RuntimeError(f"Docker API error: {e}")
+        except Exception as e:
+            logger.error(f"Failed to list volumes: {e}")
+            raise RuntimeError(f"Failed to list volumes: {e}")
+
+    def delete_volume(
+        self,
+        session: Session,
+        name: str,
+        force: bool = False
+    ) -> dict:
+        """Delete a Docker volume and record in audit log.
+        
+        Security features:
+        - Input validation for volume name
+        - Audit trail for deletion
+        
+        Args:
+            session: Database session
+            name: Name of the volume to delete
+            force: If True, removes volume even if in use (default: False)
+            
+        Returns:
+            Dictionary with deletion results
+        """
+        if not name or not name.strip():
+            raise ValueError("volume name cannot be empty")
+            
+        try:
+            # Get info before deletion
+            v = self.client.volumes.get(name)
+            
+            # Estimate size (might be 0 if not tracked by df recently)
+            # For volumes, size calculation is expensive, we rely on cached df if possible
+            # But for simple MVP, we just try to get it
+            size_bytes = 0
+            try:
+                df = self.client.df()
+                for vol_info in df.get('Volumes', []):
+                    if vol_info.get('Name') == name:
+                        size_bytes = vol_info.get('UsageData', {}).get('Size', 0)
+                        break
+            except Exception as e:
+                logger.warning(f"Could not retrieve volume size for {name} from df: {e}")
+                pass
+                
+            savings_usd = CostCalculator.calculate_monthly_cost(size_bytes)
+            
+            # Remove volume
+            v.remove(force=force)
+            
+            result = {
+                "success": True,
+                "name": name,
+                "bytes_freed": size_bytes,
+                "savings_usd": savings_usd,
+                "message": f"Successfully deleted volume {name} ({size_bytes / (1024**2):.2f} MB freed)"
+            }
+            
+            # Audit Log
+            audit_entry = AuditLog(
+                image_id=f"volume:{name}",
+                image_tags=[f"volume:{name}"],
+                bytes_freed=size_bytes,
+                savings_usd=savings_usd,
+                dry_run=False
+            )
+            session.add(audit_entry)
+            
+            logger.info(result["message"])
+            return result
+            
+        except NotFound:
+            return {"success": False, "message": f"Volume not found: {name}"}
+        except APIError as e:
+            logger.error(f"Docker API error deleting volume {name}: {e}")
+            return {"success": False, "message": f"Docker API error: {str(e)}"}
+        except Exception as e:
+            logger.error(f"Failed to delete volume {name}: {e}")
+            return {"success": False, "message": f"Failed to delete volume: {str(e)}"}

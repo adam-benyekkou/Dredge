@@ -21,6 +21,20 @@ class ImageStatus(str, Enum):
     DELETED = "DELETED"
 
 
+class VolumeStatus(str, Enum):
+    """Volume lifecycle status.
+    
+    Attributes:
+        ACTIVE: Volume is in use by a container
+        DANGLING: Volume is not used by any container
+        DELETED: Volume has been removed
+    """
+    
+    ACTIVE = "ACTIVE"
+    DANGLING = "DANGLING"
+    DELETED = "DELETED"
+
+
 class ImageArtifact(SQLModel, table=True):
     """Docker image artifact model.
     
@@ -43,6 +57,30 @@ class ImageArtifact(SQLModel, table=True):
     digest: str = Field(default="", max_length=255)
     status: ImageStatus = Field(default=ImageStatus.ACTIVE)
     expires_at: Optional[datetime] = Field(default=None)
+
+
+class VolumeArtifact(SQLModel, table=True):
+    """Docker volume artifact model.
+    
+    Represents a Docker volume with metadata for tracking usage and costs.
+    
+    Attributes:
+        id: Primary key identifier
+        name: Unique name of the volume
+        driver: Volume driver (e.g., 'local')
+        size_bytes: Estimated volume size in bytes
+        created_at: Timestamp when volume was created
+        status: Current status (ACTIVE/DANGLING/DELETED)
+        labels: Dictionary of labels associated with the volume
+    """
+    
+    id: Optional[int] = Field(default=None, primary_key=True)
+    name: str = Field(max_length=255, index=True)
+    driver: str = Field(max_length=100)
+    size_bytes: int = Field(default=0)
+    created_at: Optional[datetime] = Field(default=None)
+    status: VolumeStatus = Field(default=VolumeStatus.ACTIVE)
+    labels: List[str] = Field(default=[], sa_column=Column(SAJSON))
 
 
 class CleanupPolicy(SQLModel, table=True):

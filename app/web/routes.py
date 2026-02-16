@@ -50,6 +50,48 @@ async def images_view(request: Request, session: Session = Depends(get_session))
     )
 
 
+@router.get("/volumes", response_class=HTMLResponse)
+async def volumes_view(request: Request, session: Session = Depends(get_session)):
+    """Render the volumes view"""
+    try:
+        client = LocalDockerClient()
+        volumes = client.list_volumes()
+    except Exception as e:
+        logger.error(f"Failed to fetch volumes for view: {str(e)}")
+        volumes = []
+        
+    return templates.TemplateResponse(
+        "volumes.html",
+        {
+            "request": request,
+            "volumes": volumes,
+        }
+    )
+
+
+@router.delete("/volumes/{name}", response_class=HTMLResponse)
+async def delete_volume(name: str, session: Session = Depends(get_session)):
+    """Delete a Docker volume"""
+    try:
+        client = LocalDockerClient()
+        result = client.delete_volume(session, name)
+        
+        if result["success"]:
+            session.commit()
+            return HTMLResponse(content="")
+        else:
+            return HTMLResponse(
+                content=f'<tr class="error-row"><td colspan="7" style="color: var(--danger);">{result["message"]}</td></tr>',
+                status_code=200
+            )
+    except Exception as e:
+        logger.error(f"Volume deletion failed: {str(e)}", exc_info=True)
+        return HTMLResponse(
+            content=f'<tr class="error-row"><td colspan="7" style="color: var(--danger);">Deletion failed: {escape(str(e))}</td></tr>',
+            status_code=500
+        )
+
+
 @router.get("/policies", response_class=HTMLResponse)
 async def policies_view(request: Request, session: Session = Depends(get_session)):
     """Render the policies view"""
