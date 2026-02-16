@@ -712,14 +712,71 @@ async def restore_image(digest: str, response: Response, session: Session = Depe
     except Exception as e:
         logger.error(f"Restore failed: {str(e)}")
         return HTMLResponse(content=f"Error: {str(e)}", status_code=500)
+
+async def process_batch_deletion(selected_items: List[str], session: Session):
+    """Background task for processing batch deletions"""
+    try:
+        success_count = 0
+        fail_count = 0
+        
+        # Re-initialize clients in the background thread/task context
+        # Note: Session is thread-unsafe, but we are passing a new one via Depends usually.
+        # But here we pass 'session' from the main request.
+        # Ideally, we should create a new session factory, but for simplicity we rely on 
+        # it being open until background tasks complete in FastAPI (if dependency logic allows).
+        # Actually, standard FastAPI dependency session closes after response.
+        # WE NEED A NEW SESSION for background tasks.
+        
+        from app.core.db import engine
+        
+        with Session(engine) as bg_session:
+            # We need clients for all active registries
+            local_client = RegistryClientFactory.get_client()
+            remote_configs = bg_session.exec(select(RegistryConfig).where(RegistryConfig.is_active == True)).all()
+            remote_clients = {conf.name: RegistryClientFactory.get_client(conf) for conf in remote_configs}
+            
+            for item in selected_items:
+                # Parse value: "digest|source" or just "digest"
+                if "|" in item:
+                    digest, source = item.split("|", 1)
+                else:
+                    digest = item
+                    source = "Local"
+                    
+                try:
+                    # Select client
+                    if source == "Local":
+                        client = local_client
+                    else:
+                        client = remote_clients.get(source)
+                        if not client:
+                            logger.warning(f"No client found for source: {source}")
+                            fail_count += 1
+                            continue
+                            
+                    # Perform deletion
+                    result = client.delete_image(bg_session, digest, dry_run=False, force=True)
+                    if result["success"]:
+                        success_count += 1
+                        logger.info(f"Deleted {digest} from {source}")
+                    else:
+                        fail_count += 1
+                        logger.warning(f"Failed to delete {digest}: {result['message']}")
+                        
+                except Exception as e:
+                    logger.error(f"Error deleting {digest}: {e}")
+                    fail_count += 1
+            
+            bg_session.commit()
+            logger.info(f"Batch delete complete: {success_count} success, {fail_count} failed")
+
+from fastapi import BackgroundTasks
+
 @router.delete("/images/batch", response_class=HTMLResponse)
-async def batch_delete_images(request: Request, session: Session = Depends(get_session)):
-    """Batch delete selected images"""
+async def batch_delete_images(request: Request, background_tasks: BackgroundTasks):
+    """Batch delete selected images (Async)"""
     try:
         form_data = await request.form()
-        # Form values are "digest|source" if we update frontend, but currently just digest from scan endpoint
-        # The frontend update I made sends value="{{ image.digest }}|{{ image.source }}"
-        
         selected = form_data.getlist("selected_images")
         
         if not selected:
@@ -727,88 +784,39 @@ async def batch_delete_images(request: Request, session: Session = Depends(get_s
             response.headers["HX-Trigger"] = '{"showMessage": {"message": "No images selected", "type": "error"}}'
             return response
             
-        success_count = 0
-        fail_count = 0
+        # Spawn background task
+        background_tasks.add_task(process_batch_deletion, selected, None)
         
-        # We need clients for all active registries
-        local_client = RegistryClientFactory.get_client()
-        remote_configs = session.exec(select(RegistryConfig).where(RegistryConfig.is_active == True)).all()
-        remote_clients = {conf.name: RegistryClientFactory.get_client(conf) for conf in remote_configs}
+        # Return success immediately
+        msg = f"Deletion of {len(selected)} images started in background."
         
-        for item in selected:
-            # Parse value: "digest|source" or just "digest" (legacy)
-            if "|" in item:
-                digest, source = item.split("|", 1)
-            else:
-                digest = item
-                source = "Local"
-                
-            try:
-                # Select correct client
-                if source == "Local":
-                    client = local_client
-                else:
-                    client = remote_clients.get(source)
-                    if not client:
-                        logger.warning(f"No client found for source: {source}")
-                        fail_count += 1
-                        continue
-                        
-                # Perform deletion
-                result = client.delete_image(session, digest, dry_run=False, force=True)
-                if result["success"]:
-                    success_count += 1
-                else:
-                    fail_count += 1
-                    logger.warning(f"Failed to delete {digest}: {result['message']}")
-                    
-            except Exception as e:
-                logger.error(f"Error deleting {digest}: {e}")
-                fail_count += 1
+        # We cannot refresh the table accurately immediately since deletion is async.
+        # Option: Return current table (unchanged) with a message?
+        # Or remove the rows optimistically? Optimistic is risky if it fails.
+        # We will return a message and maybe trigger a delayed refresh via JS?
         
-        session.commit()
+        # For HTMX swap, we return the same table (maybe reload it from DB to ensure consistency)
+        # But honestly, returning an empty string and letting user refresh later is safer than blocking.
         
-        # Trigger reload of the table or just show message
-        # Ideally we refresh the whole list to reflect changes
-        # But HTMX expects a snippet to replace target.
-        # Since we targeted #image-table, we should re-render the table.
+        # Let's just return success message. The user will see "Deleting..." loader stop.
+        # But if we don't return HTML, the target (#image-table) will be empty!
         
-        # Check if it is HTMX request (it usually is for this endpoint)
-        # We want to return ONLY the partial to avoid UI duplication
+        # We MUST return the current table state (perhaps with "Deleting..." markers?).
+        # Simplest: Return success toast, keep table as is (remove 'hx-swap="outerHTML"' from frontend if we don't want to replace?)
+        # But the frontend expects a swap.
         
-        # We need to manually call images_view logic to get the data, but render the partial
-        # Reuse logic from images_view but force partial rendering
+        # We will return the current table as-is (reload local). The images will disappear on next scan/refresh.
+        # This is a trade-off for speed.
         
-        # 1. Local Images
-        local_client = RegistryClientFactory.get_client()
-        images = local_client.list_images()
+        response = HTMLResponse(content="") # No content swap? 
+        # If we return empty content and hx-swap="outerHTML", the table disappears!
+        # We should use hx-swap="none" in the response? HTMX doesn't support changing swap mode in response easily.
         
-        # 2. Remote Images
-        remote_configs = session.exec(select(RegistryConfig).where(RegistryConfig.is_active == True)).all()
-        for config in remote_configs:
-            try:
-                remote_client = RegistryClientFactory.get_client(config)
-                images.extend(remote_client.list_images())
-            except Exception:
-                pass
-
-        # 3. Collect unique sources (for filter, though filter is outside partial usually, but needed for context)
-        all_sources = sorted(list(set([img.source for img in images] + ["Local"])))
+        # Change plan: Return a "204 No Content" which HTMX ignores?
+        # If status is 204, HTMX does not swap.
         
-        # Get settings
-        settings = session.get(AppSettings, 1)
-        
-        response = templates.TemplateResponse(
-            request,
-            "partials/images_table.html",
-            {
-                "images": images,
-                "sources": all_sources,
-                "current_source": "All", # Reset filter after delete for simplicity, or grab from query if we preserved it
-                "settings": settings,
-            }
-        )
-        response.headers["HX-Trigger"] = '{"showMessage": {"message": "Batch Deletion Completed", "type": "success"}}'
+        response = Response(status_code=204)
+        response.headers["HX-Trigger"] = f'{{"showMessage": {{"message": "{msg}", "type": "info"}}}}'
         return response
         
     except Exception as e:

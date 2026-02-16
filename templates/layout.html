@@ -139,26 +139,32 @@
 
         // Toast Notification Listener
         document.body.addEventListener('showMessage', function(evt) {
-            let message = evt.detail.value;
-            let type = "info"; // default
+            let message = "";
+            let type = "info";
 
-            // Handle object structure {message: "...", type: "success"} if passed via header
-            try {
-                if (message.startsWith('{')) {
-                    const data = JSON.parse(message);
-                    message = data.message;
+            // HTMX detail can be object or string
+            if (evt.detail && evt.detail.value) {
+                // Case 1: event.detail.value is a JSON string (e.g. from HX-Trigger header)
+                try {
+                    const data = JSON.parse(evt.detail.value);
+                    message = data.message || evt.detail.value;
                     type = data.type || "info";
+                } catch(e) {
+                    message = evt.detail.value;
                 }
-            } catch(e) {}
-
-            let bg = "var(--bg-surface)";
-            let border = "var(--accent)";
-
-            if (type === "success") {
-                border = "var(--primary)";
-            } else if (type === "error") {
-                border = "var(--danger)";
+            } else if (evt.detail && evt.detail.message) {
+                // Case 2: event.detail is already the object (triggered via hx-trigger="...")
+                message = evt.detail.message;
+                type = evt.detail.type || "info";
+            } else {
+                // Fallback
+                message = "Operation completed";
             }
+
+            let border = "var(--accent)";
+            if (type === "success") border = "var(--primary)";
+            if (type === "error") border = "var(--danger)";
+            if (type === "warning") border = "var(--warning)";
 
             Toastify({
                 text: message,
