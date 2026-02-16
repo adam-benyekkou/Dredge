@@ -23,17 +23,21 @@
                         {% endif %}
                     </td>
                     <td>
-                        <div style="display: flex; gap: 0.5rem;">
-                            <button class="outline contrast small" style="padding: 0.2rem 0.5rem;">Edit</button>
-                            <button 
-                                class="outline danger small" 
-                                style="padding: 0.2rem 0.5rem;"
-                                hx-delete="/registries/{{ reg.id }}"
-                                hx-confirm="Remove this registry configuration?"
-                                hx-target="#registry-{{ reg.id }}"
-                                hx-swap="outerHTML"
-                            >Remove</button>
-                        </div>
+                        <button 
+                            class="outline secondary small" 
+                            style="padding: 0.2rem 0.5rem; margin-right: 0.5rem;"
+                            hx-get="/registries/{{ reg.id }}/edit"
+                            hx-target="#edit-registry-container"
+                            hx-swap="innerHTML"
+                        >Edit</button>
+                        <button 
+                            class="outline danger small" 
+                            style="padding: 0.2rem 0.5rem;"
+                            hx-delete="/registries/{{ reg.id }}"
+                            hx-confirm="Remove this registry configuration?"
+                            hx-target="#registry-{{ reg.id }}"
+                            hx-swap="outerHTML"
+                        >Remove</button>
                     </td>
                 </tr>
             {% endfor %}

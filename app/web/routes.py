@@ -1,6 +1,7 @@
 """API routes for Dredge"""
 
 from html import escape
+from datetime import datetime
 from fastapi import APIRouter, Request, Depends, HTTPException, Response
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
@@ -27,15 +28,47 @@ async def dashboard(request: Request, session: Session = Depends(get_session)):
     # Fetch registry count
     reg_count = session.query(RegistryConfig).count()
     
+    # Calculate real metrics from Docker
+    monthly_waste = 0
+    reclaimable_gb = 0
+    efficiency = 100
+    has_scanned = False
+    
+    total_images = 0
+    total_volumes = 0
+    
+    try:
+        client = RegistryClientFactory.get_client()
+        images = client.list_images()
+        volumes = client.list_volumes()
+        
+        total_images = len(images)
+        total_volumes = len(volumes)
+        total_image_bytes = sum(img.size_bytes for img in images)
+        total_volume_bytes = sum(vol.size_bytes for vol in volumes)
+        total_bytes = total_image_bytes + total_volume_bytes
+        
+        if total_bytes > 0:
+            has_scanned = True
+            reclaimable_gb = total_bytes / (1024 ** 3)
+            monthly_waste = CostCalculator.calculate_monthly_cost(total_bytes)
+            # Simple efficiency calculation (100% if nothing to clean, lower if there's waste)
+            efficiency = 100
+    except Exception as e:
+        logger.warning(f"Could not fetch Docker metrics for dashboard: {e}")
+    
     return templates.TemplateResponse(
         request,
         "dashboard.html",
         {
-            "monthly_waste": 0,
-            "reclaimable_gb": 0,
-            "efficiency": 100,
+            "monthly_waste": monthly_waste,
+            "reclaimable_gb": reclaimable_gb,
+            "efficiency": efficiency,
             "registry_count": reg_count,
             "settings": settings,
+            "has_scanned": has_scanned,
+            "total_images": total_images,
+            "total_volumes": total_volumes,
         }
     )
 
@@ -218,6 +251,54 @@ async def registries_view(request: Request, session: Session = Depends(get_sessi
     )
 
 
+from app.core.security import encrypt_secret
+
+
+@router.post("/registries/test", response_class=HTMLResponse)
+async def test_registry_connection(request: Request):
+    """Test connection to a registry before saving"""
+    try:
+        form_data = await request.form()
+        
+        name = str(form_data.get("name", "Test Registry")).strip()
+        reg_type = str(form_data.get("type", "DOCKERHUB"))
+        endpoint = str(form_data.get("endpoint", "")).strip()
+        username = str(form_data.get("username", "")).strip() or None
+        password = str(form_data.get("password", "")).strip() or None
+        
+        # Create a temporary config object (not saved to DB)
+        temp_config = RegistryConfig(
+            name=name,
+            type=RegistryType(reg_type),
+            endpoint=endpoint,
+            username=username,
+            password=encrypt_secret(password) if password else None
+        )
+        
+        # Instantiate client and test
+        client = RegistryClientFactory.get_client(temp_config)
+        result = client.test_connection()
+        
+        icon = "check-circle" if result["success"] else "x-circle"
+        color = "var(--primary)" if result["success"] else "var(--danger)"
+        
+        return f"""
+        <div class="connection-result" style="margin-top: 1rem; padding: 0.75rem; border-radius: 4px; background-color: rgba(0,0,0,0.2); border: 1px solid {color}; display: flex; align-items: center; gap: 0.5rem;">
+            <i data-lucide="{icon}" style="color: {color}; width: 18px;"></i>
+            <span style="font-size: 0.9rem; color: var(--text-main);">{result['message']}</span>
+        </div>
+        <script>lucide.createIcons();</script>
+        """
+        
+    except Exception as e:
+        return f"""
+        <div class="connection-result" style="margin-top: 1rem; padding: 0.75rem; border-radius: 4px; background-color: rgba(231, 76, 60, 0.1); border: 1px solid var(--danger); color: var(--danger);">
+            <i data-lucide="alert-circle" style="vertical-align: middle; margin-right: 0.5rem;"></i>
+            Error: {str(e)}
+        </div>
+        <script>lucide.createIcons();</script>
+        """
+
 @router.post("/registries", response_class=HTMLResponse)
 async def add_registry(request: Request, session: Session = Depends(get_session)):
     """Add a new remote registry"""
@@ -234,12 +315,15 @@ async def add_registry(request: Request, session: Session = Depends(get_session)
         if not name:
             raise HTTPException(status_code=400, detail="Registry name is required")
         
+        # Encrypt password before storing
+        encrypted_password = encrypt_secret(password) if password else None
+        
         new_reg = RegistryConfig(
             name=name,
             type=RegistryType(reg_type),
             endpoint=endpoint,
             username=username,
-            password=password,
+            password=encrypted_password,
         )
         
         session.add(new_reg)
@@ -255,31 +339,82 @@ async def add_registry(request: Request, session: Session = Depends(get_session)
     statement = select(RegistryConfig).order_by(RegistryConfig.created_at)
     registries = session.exec(statement).all()
     
-    # If HTMX request, we return the partial
-    return templates.TemplateResponse(
+    # If HTMX request, we return the partial with a success trigger
+    response = templates.TemplateResponse(
         request,
         "partials/registries_list.html",
         {
             "registries": registries,
         }
     )
+    response.headers["HX-Trigger"] = '{"showMessage": {"message": "Registry Added Successfully", "type": "success"}}'
+    return response
 
-    
-    session.add(new_reg)
-    session.commit()
-    
-    # Return the updated list via HTMX
-    statement = select(RegistryConfig).order_by(RegistryConfig.created_at)
-    registries = session.exec(statement).all()
-    
+
+@router.get("/registries/{reg_id}/edit", response_class=HTMLResponse)
+async def edit_registry_modal(reg_id: int, request: Request, session: Session = Depends(get_session)):
+    """Return the edit registry modal"""
+    registry = session.get(RegistryConfig, reg_id)
+    if not registry:
+        raise HTTPException(status_code=404, detail="Registry not found")
+        
     return templates.TemplateResponse(
-        "registries.html",
-        {
-            "request": request,
-            "registries": registries,
-        },
-        block_name="registries_list" # Note: Jinja2Templates doesn't support block_name by default, I'll return full list or partial
+        request,
+        "partials/edit_registry_modal.html",
+        {"registry": registry}
     )
+
+
+@router.put("/registries/{reg_id}", response_class=HTMLResponse)
+async def update_registry(reg_id: int, request: Request, session: Session = Depends(get_session)):
+    """Update an existing registry configuration"""
+    registry = session.get(RegistryConfig, reg_id)
+    if not registry:
+        raise HTTPException(status_code=404, detail="Registry not found")
+        
+    try:
+        form_data = await request.form()
+        
+        name = str(form_data.get("name", "")).strip()
+        reg_type = str(form_data.get("type", "DOCKERHUB"))
+        endpoint = str(form_data.get("endpoint", "")).strip()
+        username = str(form_data.get("username", "")).strip() or None
+        password = str(form_data.get("password", "")).strip() or None
+        
+        # Validation
+        if not name:
+            raise HTTPException(status_code=400, detail="Registry name is required")
+            
+        # Update fields
+        registry.name = name
+        registry.type = RegistryType(reg_type)
+        registry.endpoint = endpoint
+        registry.username = username
+        
+        # Only update password if provided
+        if password:
+            registry.password = encrypt_secret(password)
+            
+        session.add(registry)
+        session.commit()
+        session.refresh(registry)
+        
+        logger.info(f"Updated registry: {name} (ID: {reg_id})")
+        
+    except Exception as e:
+        logger.error(f"Failed to update registry: {str(e)}")
+        # In a real app, handle error UI
+        
+    # Return the updated list via HTMX
+    registries = session.exec(select(RegistryConfig).order_by(RegistryConfig.created_at)).all()
+    
+    response = templates.TemplateResponse(
+        request,
+        "partials/registries_list.html",
+        {"registries": registries}
+    )
+    response.headers["HX-Trigger"] = '{"showMessage": {"message": "Registry Updated Successfully", "type": "success"}}'
+    return response
 
 
 @router.delete("/registries/{reg_id}", response_class=HTMLResponse)
@@ -289,7 +424,10 @@ async def delete_registry(reg_id: int, session: Session = Depends(get_session)):
     if registry:
         session.delete(registry)
         session.commit()
-    return HTMLResponse(content="")
+    
+    response = HTMLResponse(content="")
+    response.headers["HX-Trigger"] = '{"showMessage": {"message": "Registry Removed", "type": "info"}}'
+    return response
 
 
 @router.get("/settings", response_class=HTMLResponse)
@@ -354,6 +492,76 @@ async def test_notification(response: Response):
     return HTMLResponse(content="")
 
 
+@router.post("/scan-dashboard", response_class=HTMLResponse)
+async def scan_dashboard(request: Request, response: Response, session: Session = Depends(get_session)):
+    """Scan Docker images/volumes and return dashboard summary"""
+    try:
+        client = RegistryClientFactory.get_client()
+        
+        # Get images and volumes
+        images = client.list_images()
+        volumes = client.list_volumes()
+        
+        # Calculate metrics
+        total_images = len(images)
+        total_volumes = len(volumes)
+        total_image_bytes = sum(img.size_bytes for img in images)
+        total_volume_bytes = sum(vol.size_bytes for vol in volumes)
+        total_bytes = total_image_bytes + total_volume_bytes
+        total_gb = total_bytes / (1024 ** 3)
+        monthly_cost = CostCalculator.calculate_monthly_cost(total_bytes)
+        
+        # Get settings for currency
+        settings = session.get(AppSettings, 1)
+        symbol = settings.currency_symbol if settings else "$"
+        
+        # Trigger notification
+        await send_notification(
+            title="Dredge Scan Completed",
+            body=f"Found {total_images} images and {total_volumes} volumes totaling {total_gb:.2f} GB."
+        )
+        
+        # Return dashboard summary HTML
+        html = f"""
+        <div style="text-align: center; padding: 2rem; background: rgba(0,119,182,0.05); border: 1px solid var(--primary); border-radius: 8px;">
+            <i data-lucide="check-circle" style="width: 48px; height: 48px; color: var(--accent); margin-bottom: 1rem;"></i>
+            <h3 style="color: var(--text-main); margin-bottom: 0.5rem;">Scan Complete</h3>
+            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1.5rem; margin-top: 1.5rem; max-width: 500px; margin-left: auto; margin-right: auto;">
+                <div>
+                    <div style="font-size: 2rem; font-weight: 700; color: var(--accent);">{total_images}</div>
+                    <div style="font-size: 0.9rem; color: var(--text-muted);">Images</div>
+                </div>
+                <div>
+                    <div style="font-size: 2rem; font-weight: 700; color: var(--accent);">{total_volumes}</div>
+                    <div style="font-size: 0.9rem; color: var(--text-muted);">Volumes</div>
+                </div>
+                <div>
+                    <div style="font-size: 2rem; font-weight: 700; color: var(--text-main);">{total_gb:.2f} GB</div>
+                    <div style="font-size: 0.9rem; color: var(--text-muted);">Total Size</div>
+                </div>
+                <div>
+                    <div style="font-size: 2rem; font-weight: 700; color: var(--danger);">{symbol}{monthly_cost:.2f}</div>
+                    <div style="font-size: 0.9rem; color: var(--text-muted);">Monthly Cost</div>
+                </div>
+            </div>
+            <div style="margin-top: 1.5rem; display: flex; gap: 1rem; justify-content: center;">
+                <a href="/images" class="btn outline">View Images</a>
+                <a href="/volumes" class="btn outline">View Volumes</a>
+            </div>
+        </div>
+        """
+        
+        response.headers["HX-Trigger"] = '{"showMessage": "Scan Complete"}'
+        return HTMLResponse(content=html)
+        
+    except Exception as e:
+        logger.error(f"Dashboard scan failed: {str(e)}", exc_info=True)
+        return HTMLResponse(
+            content=f'<div style="text-align: center; padding: 2rem; color: var(--danger);"><p>Scan failed: {escape(str(e))}</p><p style="font-size: 0.9rem; margin-top: 0.5rem;">Please check Docker daemon connection.</p></div>',
+            status_code=500
+        )
+
+
 @router.post("/scan", response_class=HTMLResponse)
 async def scan_images(request: Request, response: Response, session: Session = Depends(get_session)):
     """Scan Docker images and return HTML table rows"""
@@ -391,7 +599,7 @@ async def scan_images(request: Request, response: Response, session: Session = D
             
             # Status badge logic
             status = ImageStatus.ACTIVE  # Default for scan for now
-            status_class = status.lower()
+            status_class = status.value.lower()
             
             # ID for the row (must be safe for CSS selectors)
             row_id = f"image-{digest_escaped.replace(':', '-')}"
@@ -403,7 +611,7 @@ async def scan_images(request: Request, response: Response, session: Session = D
                     <td>{tag}</td>
                     <td>{size_gb:.2f} GB</td>
                     <td>{created}</td>
-                    <td><span class="badge {status_class}">{status}</span></td>
+                    <td><span class="badge {status_class}">{status.value}</span></td>
                     <td>${cost:.2f}/mo</td>
                     <td>
                         <button 

@@ -2,85 +2,12 @@
 
 {% block title %}Images - Dredge{% endblock %}
 
-{% block extra_head %}
-<style>
-    .images-table {
-        width: 100%;
-        background-color: var(--pico-card-background-color);
-        border-radius: 8px;
-        overflow: hidden;
-    }
-    
-    .images-table table {
-        width: 100%;
-        border-collapse: collapse;
-    }
-    
-    .images-table th {
-        background-color: var(--pico-background-color);
-        padding: 1rem;
-        text-align: left;
-        font-weight: 600;
-        color: var(--pico-color);
-        border-bottom: 2px solid var(--text-muted);
-    }
-    
-    .images-table td {
-        padding: 0.875rem 1rem;
-        border-bottom: 1px solid var(--text-muted);
-    }
-    
-    .images-table tr:hover {
-        background-color: rgba(0, 119, 182, 0.1);
-    }
-    
-    .badge {
-        display: inline-block;
-        padding: 0.25rem 0.75rem;
-        border-radius: 4px;
-        font-size: 0.75rem;
-        font-weight: 600;
-    }
-    
-    .badge.active {
-        background-color: var(--accent);
-        color: var(--pico-background-color);
-    }
-    
-    .badge.quarantined {
-        background-color: var(--danger);
-        color: #fff;
-    }
-    
-    .badge.deleted {
-        background-color: var(--text-muted);
-        color: #fff;
-    }
-    
-    .action-btn {
-        padding: 0.25rem 0.75rem;
-        font-size: 0.875rem;
-        margin: 0 0.25rem;
-        cursor: pointer;
-    }
-    
-    .action-btn.danger {
-        background-color: var(--danger);
-        border-color: var(--danger);
-    }
-    
-    .action-btn.danger:hover {
-        background-color: #c26a42;
-    }
-</style>
-{% endblock %}
-
 {% block page_title %}<h1>Images</h1>{% endblock %}
 
 {% block top_actions %}
     <div style="display: flex; gap: 1rem; align-items: center;">
         <form hx-get="/images" hx-target="body" hx-push-url="true" style="margin: 0;">
-            <select name="source" onchange="this.form.submit()" style="margin: 0; padding: 0.4rem 2rem 0.4rem 1rem; font-size: 0.85rem; height: auto;">
+            <select name="source" onchange="this.form.submit()" style="margin: 0; padding: 0.4rem 2rem 0.4rem 1rem; font-size: 0.85rem; height: auto; background-color: var(--bg-surface); color: var(--text-main); border: 1px solid var(--border-subtle);">
                 <option value="All" {% if current_source == 'All' %}selected{% endif %}>All Sources</option>
                 {% for source in sources %}
                     <option value="{{ source }}" {% if current_source == source %}selected{% endif %}>{{ source }}</option>
@@ -91,7 +18,7 @@
         <button 
             hx-post="/scan" 
             hx-target="#image-table" 
-            class="secondary outline"
+            class="outline"
             style="margin: 0; padding: 0.5rem 1rem; font-size: 0.9rem;"
         >
             <i data-lucide="refresh-cw" style="width: 16px; height: 16px; vertical-align: middle; margin-right: 0.25rem;"></i>
@@ -101,7 +28,7 @@
 {% endblock %}
 
 {% block content %}
-<div class="images-table" id="image-table">
+<div class="table-container" id="image-table">
     <table>
         <thead>
             <tr>
@@ -121,23 +48,23 @@
                 {% for image in images %}
                 <tr id="image-{{ image.digest.replace(':', '-') }}">
                     <td><input type="checkbox" name="image-select" value="{{ image.digest }}"></td>
-                    <td>{{ image.tags[0].split(':')[0] if image.tags else 'N/A' }}</td>
-                    <td>{{ image.tags[0].split(':')[1] if ':' in (image.tags[0] if image.tags else '') else 'latest' }}</td>
-                    <td><span class="badge" style="background-color: rgba(72, 202, 228, 0.1); color: var(--accent);">{{ image.source }}</span></td>
-                    <td>{{ (image.size_bytes / 1024**3)|round(2) }} GB</td>
+                    <td class="font-mono" style="color: var(--accent);">{{ image.tags[0].split(':')[0] if image.tags else 'N/A' }}</td>
+                    <td class="font-mono">{{ image.tags[0].split(':')[1] if ':' in (image.tags[0] if image.tags else '') else 'latest' }}</td>
+                    <td><span class="tag-pill">{{ image.source }}</span></td>
+                    <td class="font-mono" style="text-align: right;">{{ (image.size_bytes / 1024**3)|round(2) }} GB</td>
                     <td>{{ image.created_at.strftime('%Y-%m-%d %H:%M') if image.created_at else 'N/A' }}</td>
                     <td>
                         <span class="badge {{ image.status.value.lower() }}">
                             {{ image.status.value }}
                         </span>
                     </td>
-                    <td>{{ settings.currency_symbol }}{{ (image.size_bytes / 1024**3 * settings.custom_price_per_gb)|round(2) }}/mo</td>
+                    <td style="text-align: right;">{{ settings.currency_symbol }}{{ (image.size_bytes / 1024**3 * settings.custom_price_per_gb)|round(2) }}/mo</td>
                     <td>
-                        <div style="display: flex; gap: 0.25rem;">
+                        <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
                             {% if image.status == 'QUARANTINED' %}
                             <button 
-                                class="action-btn" 
-                                style="background-color: var(--accent); border-color: var(--accent); color: var(--pico-background-color);"
+                                class="btn-primary" 
+                                style="padding: 0.25rem 0.75rem; font-size: 0.8rem;"
                                 hx-post="/images/{{ image.digest }}/restore"
                                 hx-target="#image-{{ image.digest.replace(':', '-') }}"
                                 hx-swap="outerHTML"
@@ -146,13 +73,14 @@
                             </button>
                             {% endif %}
                             <button 
-                                class="action-btn danger" 
+                                class="btn-danger" 
+                                style="padding: 0.25rem 0.75rem; font-size: 0.8rem;"
                                 hx-delete="/images/{{ image.digest }}"
                                 hx-confirm="Are you sure you want to purge this image?"
                                 hx-target="#image-{{ image.digest.replace(':', '-') }}"
                                 hx-swap="outerHTML"
                             >
-                                Purge
+                                <i data-lucide="trash-2" style="width: 14px; height: 14px;"></i> Purge
                             </button>
                         </div>
                     </td>
@@ -160,8 +88,11 @@
                 {% endfor %}
             {% else %}
                 <tr>
-                    <td colspan="9" style="text-align: center; color: var(--text-muted);">
-                        No images found for the selected source.
+                    <td colspan="9" style="text-align: center; padding: 4rem 2rem;">
+                        <div style="display: flex; flex-direction: column; align-items: center; opacity: 0.5;">
+                            <i data-lucide="package" style="width: 48px; height: 48px; margin-bottom: 1rem; color: var(--text-muted);"></i>
+                            <span style="color: var(--text-muted); font-size: 1rem;">No images found for the selected source.</span>
+                        </div>
                     </td>
                 </tr>
             {% endif %}

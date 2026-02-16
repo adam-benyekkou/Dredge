@@ -6,7 +6,7 @@
 
 {% block content %}
 <div class="policies-container">
-    <div class="grid">
+    <div class="grid" style="gap: 3rem;"> <!-- Increased gap -->
         <!-- Policy Editor -->
         <div class="card">
             <header>
@@ -15,7 +15,7 @@
             </header>
 
             <form hx-post="/policies" hx-target="body">
-                <div class="grid">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1rem;">
                     <label for="keep_count">Keep Last X Versions
                         <input type="number" id="keep_count" name="keep_count" value="{{ policy.keep_count }}" min="0">
                         <small>Never delete the most recent X images of a repository.</small>
@@ -26,20 +26,23 @@
                     </label>
                 </div>
 
-                <label for="regex_whitelist">Protected Patterns (Regex)
+                <label for="regex_whitelist" style="margin-bottom: 1rem; display: block;">Protected Patterns (Regex)
                     <textarea id="regex_whitelist" name="regex_whitelist" rows="3" placeholder="e.g. ^prod-.*&#10;postgres:14">{{ policy.regex_whitelist }}</textarea>
                     <small>One pattern per line. Matches will NEVER be deleted.</small>
                 </label>
 
-                <label for="enabled">
-                    <input type="checkbox" id="enabled" name="enabled" role="switch" {% if policy.enabled %}checked{% endif %}>
-                    Enable automated scans
+                <label for="enabled" class="toggle-pill" style="margin-top: 1rem;">
+                    <input type="checkbox" id="enabled" name="enabled" {% if policy.enabled %}checked{% endif %}>
+                    <div class="toggle-track">
+                        <div class="toggle-thumb"></div>
+                    </div>
+                    <span class="toggle-label">Enable automated scans</span>
                 </label>
 
-                <footer style="margin-top: 1rem;">
+                <footer style="margin-top: 2rem; border-top: 1px solid var(--border-subtle); padding-top: 1rem;">
                     <button type="submit" class="primary">Update Policy</button>
                     {% if updated %}
-                        <span style="color: #2ECC71; margin-left: 1rem; font-size: 0.9rem;">✓ Policy updated</span>
+                        <span style="color: #4ade80; margin-left: 1rem; font-size: 0.9rem;">✓ Policy updated</span>
                     {% endif %}
                 </footer>
             </form>
@@ -52,12 +55,15 @@
                 <p style="color: var(--text-muted); font-size: 0.9rem;">Test a tag against your rules.</p>
             </header>
             
-            <label for="test_tag">Image Tag to Test
-                <input type="text" id="test_tag" placeholder="e.g. my-app:prod-v1" oninput="testPolicy(this.value)">
-            </label>
-
-            <div id="test-result" style="padding: 1rem; border-radius: 8px; background-color: rgba(119, 141, 169, 0.1); text-align: center; font-weight: 600;">
-                Enter a tag to see results
+            <div class="card-body">
+                <label for="test_tag">Image Tag to Test
+                    <input type="text" id="test_tag" placeholder="e.g. my-app:prod-v1" oninput="testPolicy(this.value)" style="margin-bottom: 1rem;">
+                </label>
+    
+                <div id="test-result" class="terminal-window">
+                    <span style="opacity: 0.5;">$ dredge test --tag <span id="cli-tag-preview">...</span></span><br>
+                    <span id="cli-output">Waiting for input...</span>
+                </div>
             </div>
         </div>
     </div>
@@ -65,10 +71,14 @@
 
 <script>
 function testPolicy(val) {
-    const resultDiv = document.getElementById('test-result');
+    const outputSpan = document.getElementById('cli-output');
+    const previewSpan = document.getElementById('cli-tag-preview');
+    
+    previewSpan.innerText = val || "...";
+    
     if (!val) {
-        resultDiv.innerText = "Enter a tag to see results";
-        resultDiv.style.color = "inherit";
+        outputSpan.innerText = "Waiting for input...";
+        outputSpan.style.color = "#4ade80";
         return;
     }
 
@@ -85,11 +95,9 @@ function testPolicy(val) {
     }
 
     if (protected) {
-        resultDiv.innerText = "SAFE (Whitelisted)";
-        resultDiv.style.color = "var(--accent)";
+        outputSpan.innerHTML = "<br>> STATUS: <span style='color: var(--accent); font-weight: bold;'>SAFE (WHITELISTED)</span><br>> REASON: Matches pattern.";
     } else {
-        resultDiv.innerText = "TARGETED (Would be scanned)";
-        resultDiv.style.color = "var(--danger)";
+        outputSpan.innerHTML = "<br>> STATUS: <span style='color: var(--danger); font-weight: bold;'>TARGETED FOR DELETION</span><br>> REASON: No whitelist match.";
     }
 }
 </script>

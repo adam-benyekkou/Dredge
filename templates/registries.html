@@ -65,13 +65,28 @@
                 </label>
             </div>
 
-            <footer style="display: flex; justify-content: flex-end; gap: 1rem; margin-top: 2rem;">
-                <button type="button" class="secondary outline" onclick="document.getElementById('add-registry-modal').close()">Cancel</button>
-                <button type="submit">Save Registry</button>
+            <!-- Test Connection Result Area -->
+            <div id="test-connection-result"></div>
+
+            <footer style="display: flex; justify-content: space-between; align-items: center; margin-top: 2rem;">
+                <button type="button" class="secondary outline" 
+                    hx-post="/registries/test" 
+                    hx-target="#test-connection-result" 
+                    hx-swap="innerHTML"
+                    hx-include="closest form">
+                    Test Connection
+                </button>
+                <div style="display: flex; gap: 1rem;">
+                    <button type="button" class="secondary outline" onclick="document.getElementById('add-registry-modal').close()">Cancel</button>
+                    <button type="submit">Save Registry</button>
+                </div>
             </footer>
         </form>
     </article>
 </dialog>
+
+<!-- Container for Edit Modal (Loaded via HTMX) -->
+<div id="edit-registry-container"></div>
 
 <style>
     .registry-table th {

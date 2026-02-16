@@ -5,8 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Dredge - Docker FinOps{% endblock %}</title>
     
-    <!-- PicoCSS -->
+    <!-- PicoCSS (Base) -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@1/css/pico.min.css">
+    
+    <!-- Deep Harbor Theme -->
+    <link rel="stylesheet" href="/static/css/theme.css">
     
     <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
@@ -18,305 +21,114 @@
     <!-- HTMX -->
     <script src="https://unpkg.com/htmx.org@1.9.10"></script>
     
-    <style>
-        :root {
-            /* Deep Harbor Theme */
-            --pico-background-color: #0D1B2A;
-            --pico-card-background-color: #1B263B;
-            --pico-primary: #0077B6;
-            --pico-primary-hover: #0096C7;
-            --pico-color: #E0E1DD;
-            --accent: #48CAE4;
-            --danger: #D97D54;
-            --text-muted: #778DA9;
-            --sidebar-width: 260px;
-            --header-height: 70px;
-        }
-        
-        body {
-            display: flex;
-            height: 100vh;
-            margin: 0;
-            background-color: var(--pico-background-color);
-            color: var(--pico-color);
-            overflow: hidden;
-            font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-        }
-        
-        /* Sidebar Styling */
-        .sidebar {
-            width: var(--sidebar-width);
-            background-color: var(--pico-card-background-color);
-            display: flex;
-            flex-direction: column;
-            border-right: 1px solid rgba(119, 141, 169, 0.2);
-            flex-shrink: 0;
-            padding: 1.5rem 1rem;
-            z-index: 10;
-        }
-        
-        .logo {
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-            padding: 0 0.5rem 1.5rem 0.5rem;
-            border-bottom: 1px solid rgba(119, 141, 169, 0.2);
-            margin-bottom: 1.5rem;
-        }
-        
-        .logo-icon {
-            color: var(--accent);
-            width: 32px;
-            height: 32px;
-        }
-        
-        .logo-text {
-            font-size: 1.5rem;
-            font-weight: 800;
-            color: var(--pico-color);
-            letter-spacing: -0.5px;
-        }
-
-        .nav-group-label {
-            font-size: 0.7rem;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            color: var(--text-muted);
-            margin: 1.5rem 0.5rem 0.5rem;
-            font-weight: 600;
-        }
-
-        .nav-link {
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-            padding: 0.75rem;
-            border-radius: 6px;
-            text-decoration: none;
-            color: var(--text-muted);
-            transition: all 0.2s ease;
-            font-weight: 500;
-            border-left: 3px solid transparent;
-        }
-
-        .nav-link:hover {
-            background-color: rgba(0, 119, 182, 0.1);
-            color: var(--pico-color);
-        }
-
-        .nav-link.active {
-            background-color: rgba(0, 119, 182, 0.2);
-            color: var(--accent);
-            border-left-color: var(--accent);
-        }
-
-        .nav-link i {
-            width: 20px;
-            height: 20px;
-        }
-
-        .spacer {
-            flex: 1;
-        }
-        
-        .sidebar-footer {
-            background-color: rgba(13, 27, 42, 0.5);
-            padding: 1rem;
-            border-radius: 8px;
-            border: 1px solid rgba(119, 141, 169, 0.2);
-            margin-top: 1rem;
-        }
-        
-        .connection-status {
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-            font-size: 0.85rem;
-            color: var(--pico-color);
-        }
-        
-        .status-dot {
-            width: 10px;
-            height: 10px;
-            background-color: #2ECC71; /* Success Green */
-            border-radius: 50%;
-            box-shadow: 0 0 8px rgba(46, 204, 113, 0.6);
-        }
-
-        .status-text {
-            font-weight: 600;
-        }
-        
-        .sidebar-footer select {
-            margin-bottom: 0.75rem;
-            background-color: var(--pico-background-color);
-            border-color: var(--text-muted);
-            color: var(--pico-color);
-            font-size: 0.85rem;
-            padding: 0.4rem 2rem 0.4rem 0.75rem;
-            height: auto;
-        }
-
-        /* Main Content Area */
-        .main-wrapper {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-            position: relative;
-        }
-
-        /* Top Header Bar */
-        .top-bar {
-            height: var(--header-height);
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 0 2rem;
-            background-color: rgba(13, 27, 42, 0.95);
-            border-bottom: 1px solid rgba(119, 141, 169, 0.2);
-            backdrop-filter: blur(10px);
-            z-index: 5;
-        }
-
-        .page-title h1 {
-            margin: 0;
-            font-size: 1.5rem;
-            font-weight: 700;
-            color: var(--pico-color);
-        }
-
-        .top-actions {
-            display: flex;
-            gap: 1rem;
-            align-items: center;
-        }
-
-        /* Content Scroll Area */
-        .content-scrollable {
-            flex: 1;
-            overflow-y: auto;
-            padding: 2rem;
-            scroll-behavior: smooth;
-        }
-        
-        .container {
-            max-width: 1400px;
-            margin: 0 auto;
-        }
-
-        /* Custom Scrollbar */
-        ::-webkit-scrollbar {
-            width: 8px;
-            height: 8px;
-        }
-        ::-webkit-scrollbar-track {
-            background: var(--pico-background-color); 
-        }
-        ::-webkit-scrollbar-thumb {
-            background: var(--text-muted); 
-            border-radius: 4px;
-        }
-        ::-webkit-scrollbar-thumb:hover {
-            background: var(--pico-primary); 
-        }
-    </style>
-    
     {% block extra_head %}{% endblock %}
 </head>
 <body>
-    <!-- Sidebar -->
+    <div id="progress-bar" class="progress-bar htmx-indicator"></div>
+
+    <!-- Sidebar "Control Deck" -->
     <aside class="sidebar">
-        <div class="logo">
-            <i data-lucide="anchor" class="logo-icon"></i>
-            <span class="logo-text">Dredge</span>
+        <div class="sidebar-header">
+            <div style="display: flex; align-items: center; gap: 0.75rem; color: var(--text-main);">
+                <i data-lucide="anchor" style="color: var(--primary);"></i>
+                <span style="font-weight: 700; font-size: 1.25rem; letter-spacing: -0.5px;">Dredge</span>
+            </div>
         </div>
         
-        <nav class="nav">
-            <!-- ANALYZE Group -->
-            <div class="nav-group-label">Analyze</div>
-            
-            <a href="/" class="nav-link {% if request.url.path == '/' %}active{% endif %}">
-                <i data-lucide="layout-dashboard"></i>
-                <span>Dashboard</span>
-            </a>
-            
-            <a href="/images" class="nav-link {% if request.url.path == '/images' %}active{% endif %}">
-                <i data-lucide="layers"></i>
-                <span>Images</span>
-            </a>
-            
-            <a href="/volumes" class="nav-link {% if request.url.path == '/volumes' %}active{% endif %}">
-                <i data-lucide="hard-drive"></i>
-                <span>Volumes</span>
-            </a>
+        <nav>
+            <ul>
+                <!-- ANALYZE -->
+                <li style="padding: 0 1.5rem; margin-top: 1.5rem; margin-bottom: 0.5rem; color: var(--text-muted); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1px; font-weight: 600;">Analyze</li>
+                
+                <li>
+                    <a href="/" class="{% if request.url.path == '/' %}active{% endif %}">
+                        <div style="display: flex; align-items: center; gap: 0.75rem;">
+                            <i data-lucide="layout-dashboard" size="18"></i>
+                            <span>Dashboard</span>
+                        </div>
+                    </a>
+                </li>
+                
+                <li>
+                    <a href="/images" class="{% if request.url.path == '/images' %}active{% endif %}">
+                        <div style="display: flex; align-items: center; gap: 0.75rem;">
+                            <i data-lucide="layers" size="18"></i>
+                            <span>Images</span>
+                        </div>
+                    </a>
+                </li>
+                
+                <li>
+                    <a href="/volumes" class="{% if request.url.path == '/volumes' %}active{% endif %}">
+                        <div style="display: flex; align-items: center; gap: 0.75rem;">
+                            <i data-lucide="hard-drive" size="18"></i>
+                            <span>Volumes</span>
+                        </div>
+                    </a>
+                </li>
 
-            <!-- CONFIGURE Group -->
-            <div class="nav-group-label">Configure</div>
-            
-            <a href="/registries" class="nav-link {% if request.url.path == '/registries' %}active{% endif %}">
-                <i data-lucide="database"></i>
-                <span>Registries</span>
-            </a>
+                <!-- CONFIGURE -->
+                <li style="padding: 0 1.5rem; margin-top: 1.5rem; margin-bottom: 0.5rem; color: var(--text-muted); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1px; font-weight: 600;">Configure</li>
+                
+                <li>
+                    <a href="/registries" class="{% if request.url.path == '/registries' %}active{% endif %}">
+                        <div style="display: flex; align-items: center; gap: 0.75rem;">
+                            <i data-lucide="database" size="18"></i>
+                            <span>Registries</span>
+                        </div>
+                    </a>
+                </li>
 
-            <a href="/policies" class="nav-link {% if request.url.path == '/policies' %}active{% endif %}">
-                <i data-lucide="shield-check"></i>
-                <span>Policies</span>
-            </a>
-            
-            <a href="/logs" class="nav-link {% if request.url.path == '/logs' %}active{% endif %}">
-                <i data-lucide="clipboard-list"></i>
-                <span>Logs</span>
-            </a>
+                <li>
+                    <a href="/policies" class="{% if request.url.path == '/policies' %}active{% endif %}">
+                        <div style="display: flex; align-items: center; gap: 0.75rem;">
+                            <i data-lucide="shield-check" size="18"></i>
+                            <span>Policies</span>
+                        </div>
+                    </a>
+                </li>
+                
+                <li>
+                    <a href="/logs" class="{% if request.url.path == '/logs' %}active{% endif %}">
+                        <div style="display: flex; align-items: center; gap: 0.75rem;">
+                            <i data-lucide="clipboard-list" size="18"></i>
+                            <span>Logs</span>
+                        </div>
+                    </a>
+                </li>
 
-            <a href="/settings" class="nav-link {% if request.url.path == '/settings' %}active{% endif %}">
-                <i data-lucide="settings"></i>
-                <span>Settings</span>
-            </a>
+                <li>
+                    <a href="/settings" class="{% if request.url.path == '/settings' %}active{% endif %}">
+                        <div style="display: flex; align-items: center; gap: 0.75rem;">
+                            <i data-lucide="settings" size="18"></i>
+                            <span>Settings</span>
+                        </div>
+                    </a>
+                </li>
+            </ul>
         </nav>
         
-        <div class="spacer"></div>
-        
-        <div class="sidebar-footer">
-            <select aria-label="Select Registry">
-                <option selected>Local Socket</option>
-                <option>Remote Registry</option>
-            </select>
-            
-            <div class="connection-status">
-                <div class="status-dot"></div>
-                <span class="status-text">Connected</span>
-            </div>
+        <div class="status-card">
+            <div style="width: 8px; height: 8px; background-color: #4ade80; border-radius: 50%; box-shadow: 0 0 5px #4ade80;"></div>
+            <span>System Online</span>
         </div>
     </aside>
     
-    <!-- Main Content Wrapper -->
-    <div class="main-wrapper">
-        <!-- Top Header Bar -->
-        <header class="top-bar">
+    <!-- Main Content -->
+    <div class="main-content">
+        <header style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; border-bottom: 1px solid var(--border-subtle); padding-bottom: 1rem;">
             <div class="page-title">
                 {% block page_title %}<h1>Overview</h1>{% endblock %}
             </div>
             <div class="top-actions">
-                {% block top_actions %}
-                    <!-- Default actions or empty -->
-                    <button class="outline contrast" style="padding: 0.4rem 1rem; font-size: 0.9rem; border: 1px solid var(--text-muted); color: var(--text-muted);">
-                        <i data-lucide="bell" style="width: 16px; height: 16px; vertical-align: middle; margin-right: 0.25rem;"></i>
-                        Alerts
-                    </button>
-                {% endblock %}
+                {% block top_actions %}{% endblock %}
             </div>
         </header>
 
-        <!-- Scrollable Content -->
-        <main class="content-scrollable">
-            <div class="container">
-                {% block content %}{% endblock %}
-            </div>
-        </main>
+        {% block content %}{% endblock %}
     </div>
 
-    <!-- Initialize Lucide Icons -->
+    <!-- Scripts -->
     <script>
         lucide.createIcons();
         
@@ -327,17 +139,39 @@
 
         // Toast Notification Listener
         document.body.addEventListener('showMessage', function(evt) {
-            const message = evt.detail.value || evt.detail;
+            let message = evt.detail.value;
+            let type = "info"; // default
+
+            // Handle object structure {message: "...", type: "success"} if passed via header
+            try {
+                if (message.startsWith('{')) {
+                    const data = JSON.parse(message);
+                    message = data.message;
+                    type = data.type || "info";
+                }
+            } catch(e) {}
+
+            let bg = "var(--bg-surface)";
+            let border = "var(--accent)";
+
+            if (type === "success") {
+                border = "var(--primary)";
+            } else if (type === "error") {
+                border = "var(--danger)";
+            }
+
             Toastify({
                 text: message,
                 duration: 3000,
                 gravity: "top",
                 position: "right",
                 style: {
-                    background: "linear-gradient(135deg, #1B263B, #0D1B2A)",
-                    border: "1px solid var(--accent)",
-                    color: "var(--pico-color)",
-                    borderRadius: "8px"
+                    background: "var(--bg-surface)",
+                    border: `1px solid ${border}`,
+                    color: "var(--text-main)",
+                    borderRadius: "4px",
+                    boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
+                    padding: "12px 20px"
                 }
             }).showToast();
         });

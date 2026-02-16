@@ -4,6 +4,7 @@ services:
   dredge:
     build: .
     container_name: dredge
+    user: root
     ports:
       - "8000:8000"
     volumes:

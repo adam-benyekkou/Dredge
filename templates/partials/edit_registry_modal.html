@@ -1,0 +1,56 @@
+<dialog id="edit-registry-modal" open>
+    <article style="width: 500px;">
+        <header>
+            <a href="#close" aria-label="Close" class="close" onclick="this.closest('dialog').remove()"></a>
+            <h3>Edit Registry: {{ registry.name }}</h3>
+        </header>
+        <form hx-put="/registries/{{ registry.id }}" hx-target="#registries-list" hx-swap="innerHTML" onsubmit="this.closest('dialog').remove()">
+            <label for="edit-name">Friendly Name
+                <input type="text" id="edit-name" name="name" value="{{ registry.name }}" required>
+            </label>
+
+            <label for="edit-type">Registry Provider
+                <select id="edit-type" name="type" required>
+                    <option value="DOCKERHUB" {% if registry.type.value == 'DOCKERHUB' %}selected{% endif %}>Docker Hub</option>
+                    <option value="GHCR" {% if registry.type.value == 'GHCR' %}selected{% endif %}>GitHub Container Registry</option>
+                    <option value="ECR" {% if registry.type.value == 'ECR' %}selected{% endif %}>Amazon ECR</option>
+                    <option value="ACR" {% if registry.type.value == 'ACR' %}selected{% endif %}>Azure Container Registry</option>
+                    <option value="GCR" {% if registry.type.value == 'GCR' %}selected{% endif %}>Google Container Registry</option>
+                    <option value="GAR" {% if registry.type.value == 'GAR' %}selected{% endif %}>Google Artifact Registry</option>
+                    <option value="CUSTOM" {% if registry.type.value == 'CUSTOM' %}selected{% endif %}>Custom Registry</option>
+                </select>
+            </label>
+
+            <label for="edit-endpoint">Endpoint (Optional)
+                <input type="text" id="edit-endpoint" name="endpoint" value="{{ registry.endpoint or '' }}" placeholder="e.g. index.docker.io/v1/">
+                <small>Leave empty for default provider endpoints.</small>
+            </label>
+
+            <div class="grid">
+                <label for="edit-username">Username
+                    <input type="text" id="edit-username" name="username" value="{{ registry.username or '' }}" placeholder="Username / Access Key">
+                </label>
+                <label for="edit-password">Password / Token
+                    <input type="password" id="edit-password" name="password" placeholder="•••••••• (Leave empty to keep)">
+                </label>
+            </div>
+
+            <!-- Test Connection Result Area -->
+            <div id="edit-test-connection-result"></div>
+
+            <footer style="display: flex; justify-content: space-between; align-items: center; margin-top: 2rem;">
+                <button type="button" class="secondary outline" 
+                    hx-post="/registries/test" 
+                    hx-target="#edit-test-connection-result" 
+                    hx-swap="innerHTML"
+                    hx-include="closest form">
+                    Test Connection
+                </button>
+                <div style="display: flex; gap: 1rem;">
+                    <button type="button" class="secondary outline" onclick="this.closest('dialog').remove()">Cancel</button>
+                    <button type="submit">Update Registry</button>
+                </div>
+            </footer>
+        </form>
+    </article>
+</dialog>

@@ -18,6 +18,7 @@ dependencies = [
     "boto3",
     "google-auth",
     "requests",
+    "cryptography",
 ]
 
 [project.optional-dependencies]

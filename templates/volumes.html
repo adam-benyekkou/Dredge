@@ -2,81 +2,12 @@
 
 {% block title %}Volumes - Dredge{% endblock %}
 
-{% block extra_head %}
-<style>
-    .volumes-table {
-        width: 100%;
-        background-color: var(--pico-card-background-color);
-        border-radius: 8px;
-        overflow: hidden;
-    }
-    
-    .volumes-table table {
-        width: 100%;
-        border-collapse: collapse;
-    }
-    
-    .volumes-table th {
-        background-color: var(--pico-background-color);
-        padding: 1rem;
-        text-align: left;
-        font-weight: 600;
-        color: var(--pico-color);
-        border-bottom: 2px solid var(--text-muted);
-    }
-    
-    .volumes-table td {
-        padding: 0.875rem 1rem;
-        border-bottom: 1px solid var(--text-muted);
-    }
-    
-    .volumes-table tr:hover {
-        background-color: rgba(0, 119, 182, 0.1);
-    }
-    
-    .badge {
-        display: inline-block;
-        padding: 0.25rem 0.75rem;
-        border-radius: 4px;
-        font-size: 0.75rem;
-        font-weight: 600;
-    }
-    
-    .badge.active {
-        background-color: var(--accent);
-        color: var(--pico-background-color);
-    }
-    
-    .badge.dangling {
-        background-color: var(--danger);
-        color: #fff;
-    }
-    
-    .badge.deleted {
-        background-color: var(--text-muted);
-        color: #fff;
-    }
-    
-    .action-btn {
-        padding: 0.25rem 0.75rem;
-        font-size: 0.875rem;
-        margin: 0 0.25rem;
-        cursor: pointer;
-    }
-    
-    .action-btn.danger {
-        background-color: var(--danger);
-        border-color: var(--danger);
-    }
-</style>
-{% endblock %}
-
 {% block page_title %}<h1>Volumes</h1>{% endblock %}
 
 {% block top_actions %}
     <div style="display: flex; gap: 1rem; align-items: center;">
         <form hx-get="/volumes" hx-target="body" hx-push-url="true" style="margin: 0;">
-            <select name="source" onchange="this.form.submit()" style="margin: 0; padding: 0.4rem 2rem 0.4rem 1rem; font-size: 0.85rem; height: auto;">
+            <select name="source" onchange="this.form.submit()" style="margin: 0; padding: 0.4rem 2rem 0.4rem 1rem; font-size: 0.85rem; height: auto; background-color: var(--bg-surface); color: var(--text-main); border: 1px solid var(--border-subtle);">
                 <option value="All" {% if current_source == 'All' %}selected{% endif %}>All Sources</option>
                 {% for source in sources %}
                     <option value="{{ source }}" {% if current_source == source %}selected{% endif %}>{{ source }}</option>
@@ -98,7 +29,7 @@
 {% endblock %}
 
 {% block content %}
-<div class="volumes-table" id="volume-table">
+<div class="table-container" id="volume-table">
     <table>
         <thead>
             <tr>
@@ -116,34 +47,38 @@
             {% if volumes %}
                 {% for volume in volumes %}
                 <tr id="volume-{{ volume.name }}">
-                    <td>{{ volume.name }}</td>
+                    <td class="font-mono" style="color: var(--accent);">{{ volume.name }}</td>
                     <td>{{ volume.driver }}</td>
-                    <td><span class="badge" style="background-color: rgba(72, 202, 228, 0.1); color: var(--accent);">{{ volume.source }}</span></td>
+                    <td><span class="tag-pill">{{ volume.source }}</span></td>
                     <td>{{ volume.created_at.strftime('%Y-%m-%d %H:%M') if volume.created_at else 'N/A' }}</td>
-                    <td>{{ (volume.size_bytes / 1024**2)|round(2) }} MB</td>
-                    <td>{{ settings.currency_symbol }}{{ (volume.size_bytes / 1024**3 * settings.custom_price_per_gb)|round(2) }}/mo</td>
+                    <td class="font-mono" style="text-align: right;">{{ (volume.size_bytes / 1024**2)|round(2) }} MB</td>
+                    <td style="text-align: right;">{{ settings.currency_symbol }}{{ (volume.size_bytes / 1024**3 * settings.custom_price_per_gb)|round(2) }}/mo</td>
                     <td>
-                        <span class="badge {{ volume.status.lower() }}">
-                            {{ volume.status }}
+                        <span class="badge {{ volume.status.value.lower() }}">
+                            {{ volume.status.value }}
                         </span>
                     </td>
                     <td>
                         <button 
-                            class="action-btn danger" 
+                            class="btn-danger" 
+                            style="padding: 0.25rem 0.75rem; font-size: 0.8rem;"
                             hx-delete="/volumes/{{ volume.name }}"
                             hx-confirm="Are you sure you want to delete this volume?"
                             hx-target="#volume-{{ volume.name }}"
                             hx-swap="outerHTML"
                         >
-                            Prune
+                            <i data-lucide="trash-2" style="width: 14px; height: 14px;"></i> Prune
                         </button>
                     </td>
                 </tr>
                 {% endfor %}
             {% else %}
                 <tr>
-                    <td colspan="8" style="text-align: center; color: var(--text-muted);">
-                        No volumes found for the selected source.
+                    <td colspan="8" style="text-align: center; padding: 4rem 2rem;">
+                        <div style="display: flex; flex-direction: column; align-items: center; opacity: 0.5;">
+                            <i data-lucide="hard-drive" style="width: 48px; height: 48px; margin-bottom: 1rem; color: var(--text-muted);"></i>
+                            <span style="color: var(--text-muted); font-size: 1rem;">No volumes found for the selected source.</span>
+                        </div>
                     </td>
                 </tr>
             {% endif %}

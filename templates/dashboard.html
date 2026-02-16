@@ -2,67 +2,20 @@
 
 {% block title %}Dashboard - Dredge{% endblock %}
 
-{% block extra_head %}
-<style>
-    .kpi-row {
-        display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        gap: 1.5rem;
-        margin-bottom: 2rem;
-    }
-    
-    .kpi-card {
-        background-color: var(--pico-card-background-color);
-        padding: 1.5rem;
-        border-radius: 8px;
-        border: 1px solid var(--text-muted);
-    }
-    
-    .kpi-label {
-        font-size: 0.875rem;
-        color: var(--text-muted);
-        margin-bottom: 0.5rem;
-    }
-    
-    .kpi-value {
-        font-size: 2rem;
-        font-weight: bold;
-    }
-    
-    .kpi-value.danger {
-        color: var(--danger);
-    }
-    
-    .kpi-value.accent {
-        color: var(--accent);
-    }
-    
-    .action-bar {
-        display: flex;
-        gap: 1rem;
-        align-items: center;
-        margin-bottom: 2rem;
-    }
-    
-    .toggle-switch {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-    }
-</style>
-{% endblock %}
-
 {% block page_title %}<h1>Dashboard</h1>{% endblock %}
 
 {% block top_actions %}
     <div style="display: flex; align-items: center; gap: 1.5rem;">
-        <label style="margin: 0; display: flex; align-items: center; gap: 0.5rem; color: var(--text-muted); font-size: 0.9rem; cursor: pointer;">
-            <input type="checkbox" id="dry-run-toggle" style="margin: 0; width: 1.2rem; height: 1.2rem;">
-            <span>Dry Run Mode</span>
+        <label class="toggle-pill">
+            <input type="checkbox" id="dry-run-toggle">
+            <div class="toggle-track">
+                <div class="toggle-thumb"></div>
+            </div>
+            <span class="toggle-label">Dry Run Mode</span>
         </label>
         
         <button 
-            hx-post="/scan" 
+            hx-post="/scan-dashboard" 
             hx-target="#scan-results" 
             hx-indicator="#spinner"
             class="primary"
@@ -75,57 +28,130 @@
 {% endblock %}
 
 {% block content %}
-<div class="kpi-row">
-        <div class="kpi-card">
-            <div class="kpi-label">Monthly Waste</div>
-            <div class="kpi-value danger">{{ settings.currency_symbol }}{{ monthly_waste|default(0)|round(2) }}</div>
+<div class="grid-3 mb-4">
+    <article class="card">
+        <header class="card-header">Monthly Waste</header>
+        <div class="card-body">
+            <div style="font-size: 2rem; font-weight: 800; color: var(--danger);">
+                {{ settings.currency_symbol }}{{ monthly_waste|default(0)|round(2) }}
+            </div>
         </div>
-        
-        <div class="kpi-card">
-            <div class="kpi-label">Reclaimable Space</div>
-            <div class="kpi-value accent">{{ reclaimable_gb|default(0)|round(2) }} GB</div>
+    </article>
+    
+    <article class="card">
+        <header class="card-header">Reclaimable Space</header>
+        <div class="card-body">
+            <div style="font-size: 2rem; font-weight: 800; color: var(--accent);">
+                {{ reclaimable_gb|default(0)|round(2) }} GB
+            </div>
         </div>
-        
-        <div class="kpi-card">
-            <div class="kpi-label">Efficiency Score</div>
-            <div class="kpi-value">{{ efficiency|default(0)|round(1) }}%</div>
+    </article>
+    
+    <article class="card">
+        <header class="card-header">Efficiency Score</header>
+        <div class="card-body">
+            <div style="font-size: 2rem; font-weight: 800; color: var(--text-main);">
+                {{ efficiency|default(0)|round(1) }}%
+            </div>
         </div>
+    </article>
 </div>
 
 {% if registry_count == 0 %}
-<div style="background-color: rgba(217, 125, 84, 0.1); border: 1px solid var(--danger); border-radius: 8px; padding: 1rem; display: flex; align-items: center; gap: 1rem; margin-bottom: 2rem;">
-    <i data-lucide="alert-triangle" style="color: var(--danger);"></i>
-    <div style="flex: 1;">
-        <strong style="color: var(--pico-color);">No Remote Registries Configured</strong>
-        <p style="margin: 0; font-size: 0.85rem; color: var(--text-muted);">Configure external registries (Docker Hub, ECR, etc.) to scan for remote image costs.</p>
+<article class="card" id="registry-alert" style="border-color: var(--danger); background-color: rgba(217, 125, 84, 0.05); margin-top: 0; margin-bottom: 1.5rem;">
+    <div class="card-body" style="display: flex; align-items: center; gap: 1rem; position: relative;">
+        <i data-lucide="alert-triangle" style="color: var(--danger); width: 24px; height: 24px;"></i>
+        <div style="flex: 1;">
+            <strong style="color: var(--text-main); font-size: 1rem;">No Remote Registries Configured</strong>
+            <p style="margin: 0; font-size: 0.9rem; color: var(--text-muted);">Configure external registries (Docker Hub, ECR, etc.) to scan for remote image costs.</p>
+        </div>
+        <a href="/registries" class="btn btn-ghost" style="text-decoration: none; font-size: 0.9rem; margin-right: 2rem;">Setup Now</a>
+        <button 
+            onclick="localStorage.setItem('registry-alert-dismissed', 'true'); document.getElementById('registry-alert').remove();" 
+            style="position: absolute; top: 0.75rem; right: 0.75rem; background: none; border: none; cursor: pointer; padding: 0.25rem; color: var(--text-muted); opacity: 0.6; transition: opacity 0.2s;"
+            onmouseover="this.style.opacity='1'"
+            onmouseout="this.style.opacity='0.6'"
+            title="Dismiss"
+        >
+            <i data-lucide="x" style="width: 20px; height: 20px;"></i>
+        </button>
     </div>
-    <a href="/registries" class="button secondary small" style="margin: 0; font-size: 0.8rem; padding: 0.4rem 1rem;">Setup Now</a>
-</div>
+</article>
 {% else %}
-<div style="background-color: rgba(72, 202, 228, 0.05); border: 1px solid rgba(119, 141, 169, 0.2); border-radius: 8px; padding: 1rem; display: flex; align-items: center; gap: 1rem; margin-bottom: 2rem;">
-    <i data-lucide="database" style="color: var(--accent);"></i>
-    <div style="flex: 1;">
-        <strong style="color: var(--pico-color);">{{ registry_count }} Remote Registries Active</strong>
-        <p style="margin: 0; font-size: 0.85rem; color: var(--text-muted);">Connected to external providers. Remote scans are enabled.</p>
+<article class="card" id="registry-alert" style="border-color: var(--primary); background-color: rgba(0, 119, 182, 0.05); margin-top: 0; margin-bottom: 1.5rem;">
+    <div class="card-body" style="display: flex; align-items: center; gap: 1rem; position: relative;">
+        <i data-lucide="database" style="color: var(--accent); width: 24px; height: 24px;"></i>
+        <div style="flex: 1;">
+            <strong style="color: var(--text-main); font-size: 1rem;">{{ registry_count }} Remote Registries Active</strong>
+            <p style="margin: 0; font-size: 0.9rem; color: var(--text-muted);">Connected to external providers. Remote scans are enabled.</p>
+        </div>
+        <a href="/registries" style="font-size: 0.9rem; color: var(--accent); text-decoration: none; margin-right: 2rem;">Manage Registries →</a>
+        <button 
+            onclick="localStorage.setItem('registry-alert-dismissed', 'true'); document.getElementById('registry-alert').remove();" 
+            style="position: absolute; top: 0.75rem; right: 0.75rem; background: none; border: none; cursor: pointer; padding: 0.25rem; color: var(--text-muted); opacity: 0.6; transition: opacity 0.2s;"
+            onmouseover="this.style.opacity='1'"
+            onmouseout="this.style.opacity='0.6'"
+            title="Dismiss"
+        >
+            <i data-lucide="x" style="width: 20px; height: 20px;"></i>
+        </button>
     </div>
-    <a href="/registries" style="font-size: 0.85rem; color: var(--accent);">Manage Registries →</a>
-</div>
+</article>
 {% endif %}
 
-<div id="scan-results">
+<script>
+// Check if registry alert was previously dismissed
+if (localStorage.getItem('registry-alert-dismissed') === 'true') {
+    const alert = document.getElementById('registry-alert');
+    if (alert) {
+        alert.style.display = 'none';
+    }
+}
+</script>
+
+<div id="scan-results" style="margin-top: 0;">
     <div id="spinner" class="htmx-indicator" style="text-align: center; padding: 2rem;">
-        <div aria-busy="true">Scanning local Docker resources...</div>
+        <div aria-busy="true" style="color: var(--accent);">Scanning local Docker resources...</div>
     </div>
     
-    <div style="text-align: center; padding: 4rem 2rem; background-color: rgba(27, 38, 59, 0.3); border-radius: 12px; border: 2px dashed rgba(119, 141, 169, 0.2);">
+    {% if has_scanned %}
+    <div style="text-align: center; padding: 2rem; background: rgba(0,119,182,0.05); border: 1px solid var(--primary); border-radius: 8px; margin-top: 0;">
+        <i data-lucide="check-circle" style="width: 48px; height: 48px; color: var(--accent); margin-bottom: 1rem;"></i>
+        <h3 style="color: var(--text-main); margin-bottom: 0.5rem;">Latest Scan Results</h3>
+        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1.5rem; margin-top: 1.5rem; max-width: 500px; margin-left: auto; margin-right: auto;">
+            <div>
+                <div style="font-size: 2rem; font-weight: 700; color: var(--accent);">{{ total_images }}</div>
+                <div style="font-size: 0.9rem; color: var(--text-muted);">Images</div>
+            </div>
+            <div>
+                <div style="font-size: 2rem; font-weight: 700; color: var(--accent);">{{ total_volumes }}</div>
+                <div style="font-size: 0.9rem; color: var(--text-muted);">Volumes</div>
+            </div>
+            <div>
+                <div style="font-size: 2rem; font-weight: 700; color: var(--text-main);">{{ reclaimable_gb|round(2) }} GB</div>
+                <div style="font-size: 0.9rem; color: var(--text-muted);">Total Size</div>
+            </div>
+            <div>
+                <div style="font-size: 2rem; font-weight: 700; color: var(--danger);">{{ settings.currency_symbol }}{{ monthly_waste|round(2) }}</div>
+                <div style="font-size: 0.9rem; color: var(--text-muted);">Monthly Cost</div>
+            </div>
+        </div>
+        <div style="margin-top: 1.5rem; display: flex; gap: 1rem; justify-content: center;">
+            <a href="/images" class="btn outline">View Images</a>
+            <a href="/volumes" class="btn outline">View Volumes</a>
+        </div>
+    </div>
+    {% else %}
+    <div style="text-align: center; padding: 2rem 2rem; border: 2px dashed var(--border-subtle); border-radius: 8px; margin-top: 0;">
         <i data-lucide="search" style="width: 64px; height: 64px; color: var(--text-muted); margin-bottom: 1.5rem; opacity: 0.5;"></i>
-        <h3 style="color: var(--pico-color);">No scan data yet</h3>
+        <h3 style="color: var(--text-main); margin-bottom: 0.5rem;">No scan data yet</h3>
         <p style="color: var(--text-muted); max-width: 400px; margin: 0 auto 2rem;">
             Dredge hasn't analyzed your environment in this session. Click 'Scan Now' to identify potential savings and dangling resources.
         </p>
-        <button hx-post="/scan" hx-target="#scan-results" hx-indicator="#spinner" class="secondary outline" style="width: auto;">
+        <button hx-post="/scan-dashboard" hx-target="#scan-results" hx-indicator="#spinner" class="outline" style="width: auto;">
             Begin Analysis
         </button>
     </div>
+    {% endif %}
 </div>
 {% endblock %}

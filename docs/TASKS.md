@@ -14,13 +14,45 @@
 - [x] Manual Purge (Permanent deletion)
 - [x] Local Volume Management (Phase 2.5)
 
-## Phase 3: Multi-Source & Remote Registries (Completed)
+## Phase 3: Multi-Source & Remote Registries (In Progress)
+**Goal:** Real integration with Docker Hub, GHCR, and other V2-compliant registries.
+
+### 3.1 Registry Configuration (UI/Models) - Completed
 - [x] Registry Configuration Models
 - [x] Registry Management UI (Add/Remove)
 - [x] Registry Abstraction Layer (Factory/Clients)
-- [x] Support for Docker Hub, ECR, ACR, GCR, GAR, GHCR
 - [x] Unified Image/Volume Views with Source Tracking
 - [x] Source-based Filtering
+
+### 3.2 Registry Implementation (The Real Work)
+- [ ] **Docker Hub Integration**
+  - [ ] Implement `DockerHubClient` using Registry HTTP API V2
+  - [ ] Implement Token Authentication (Bearer Auth)
+  - [ ] Implement `list_images` (Catalog API + Tag Enumeration)
+  - [ ] Implement `get_manifest_size` (Manifest API v2 schema 2)
+  - [ ] Pagination support (Link headers)
+
+- [ ] **GitHub Container Registry (GHCR) Integration**
+  - [ ] Implement `GHCRClient` (likely sharing V2 logic with DockerHub)
+  - [ ] Handle GHCR-specific auth scopes
+  - [ ] Verify Private Package access
+
+- [ ] **Registry Management Improvements**
+  - [ ] **Fix:** Re-implement "Edit Registry" button (Modal + Backend)
+  - [ ] **Feat:** Test Connection button in UI to verify credentials
+
+### 3.3 Testing Plan
+- **Unit Tests**:
+  - Mock `httpx` or `requests` to simulate Registry V2 API responses.
+  - Test Auth flow (Www-Authenticate header parsing).
+  - Test Pagination logic.
+- **Integration Tests**:
+  - Verify against public Docker Hub repositories (e.g., `library/alpine`).
+  - Verify against private Docker Hub repositories (requires credentials).
+- **Manual Verification**:
+  - User adds Docker Hub credentials.
+  - User sees private images in dashboard.
+  - User sees correct sizes and "Active" status.
 
 ## Phase 4: Polish & Quality of Life (The "Product" Feel)
 **Goal:** User configuration, safety mechanisms, and visual feedback.
