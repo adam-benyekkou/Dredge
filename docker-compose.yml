@@ -1,0 +1,12 @@
+version: '3.8'
+
+services:
+  dredge:
+    build: .
+    container_name: dredge
+    ports:
+      - "8000:8000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - PYTHONUNBUFFERED=1

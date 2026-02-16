@@ -11,3 +11,10 @@ dependencies = [
     "jinja2",
     "docker",
 ]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "httpx",
+    "pytest-asyncio",
+]
