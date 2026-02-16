@@ -1,0 +1,105 @@
+{% extends "layout.html" %}
+
+{% block title %}Images - Dredge{% endblock %}
+
+{% block extra_head %}
+<style>
+    .images-table {
+        width: 100%;
+        background-color: var(--pico-card-background-color);
+        border-radius: 8px;
+        overflow: hidden;
+    }
+    
+    .images-table table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+    
+    .images-table th {
+        background-color: var(--pico-background-color);
+        padding: 1rem;
+        text-align: left;
+        font-weight: 600;
+        color: var(--pico-color);
+        border-bottom: 2px solid var(--text-muted);
+    }
+    
+    .images-table td {
+        padding: 0.875rem 1rem;
+        border-bottom: 1px solid var(--text-muted);
+    }
+    
+    .images-table tr:hover {
+        background-color: rgba(0, 119, 182, 0.1);
+    }
+    
+    .badge {
+        display: inline-block;
+        padding: 0.25rem 0.75rem;
+        border-radius: 4px;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+    
+    .badge.safe {
+        background-color: var(--accent);
+        color: var(--pico-background-color);
+    }
+    
+    .badge.dangling {
+        background-color: var(--danger);
+        color: #fff;
+    }
+    
+    .badge.quarantined {
+        background: repeating-linear-gradient(
+            45deg,
+            var(--text-muted),
+            var(--text-muted) 10px,
+            #2a2a2a 10px,
+            #2a2a2a 20px
+        );
+        color: #fff;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<h1>Docker Images</h1>
+
+<div class="images-table" id="image-table">
+    <table>
+        <thead>
+            <tr>
+                <th><input type="checkbox" id="select-all"></th>
+                <th>Repository</th>
+                <th>Tag</th>
+                <th>Size</th>
+                <th>Created</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% if images %}
+                {% for image in images %}
+                <tr>
+                    <td><input type="checkbox" name="image-select" value="{{ image.digest }}"></td>
+                    <td>{{ image.tags[0].split(':')[0] if image.tags else 'N/A' }}</td>
+                    <td>{{ image.tags[0].split(':')[1] if ':' in (image.tags[0] if image.tags else '') else 'latest' }}</td>
+                    <td>{{ (image.size_bytes / 1024**3)|round(2) }} GB</td>
+                    <td>{{ image.created_at.strftime('%Y-%m-%d %H:%M') if image.created_at else 'N/A' }}</td>
+                    <td><span class="badge safe">Safe</span></td>
+                </tr>
+                {% endfor %}
+            {% else %}
+                <tr>
+                    <td colspan="6" style="text-align: center; color: var(--text-muted);">
+                        No images found. Click "Scan Now" from the dashboard.
+                    </td>
+                </tr>
+            {% endif %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

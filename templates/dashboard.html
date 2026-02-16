@@ -1,0 +1,91 @@
+{% extends "layout.html" %}
+
+{% block title %}Dashboard - Dredge{% endblock %}
+
+{% block extra_head %}
+<style>
+    .kpi-row {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 1.5rem;
+        margin-bottom: 2rem;
+    }
+    
+    .kpi-card {
+        background-color: var(--pico-card-background-color);
+        padding: 1.5rem;
+        border-radius: 8px;
+        border: 1px solid var(--text-muted);
+    }
+    
+    .kpi-label {
+        font-size: 0.875rem;
+        color: var(--text-muted);
+        margin-bottom: 0.5rem;
+    }
+    
+    .kpi-value {
+        font-size: 2rem;
+        font-weight: bold;
+    }
+    
+    .kpi-value.danger {
+        color: var(--danger);
+    }
+    
+    .kpi-value.accent {
+        color: var(--accent);
+    }
+    
+    .action-bar {
+        display: flex;
+        gap: 1rem;
+        align-items: center;
+        margin-bottom: 2rem;
+    }
+    
+    .toggle-switch {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<h1>Dashboard</h1>
+
+<div class="kpi-row">
+    <div class="kpi-card">
+        <div class="kpi-label">Monthly Waste</div>
+        <div class="kpi-value danger">${{ monthly_waste|default(0)|round(2) }}</div>
+    </div>
+    
+    <div class="kpi-card">
+        <div class="kpi-label">Reclaimable Space</div>
+        <div class="kpi-value accent">{{ reclaimable_gb|default(0)|round(2) }} GB</div>
+    </div>
+    
+    <div class="kpi-card">
+        <div class="kpi-label">Efficiency Score</div>
+        <div class="kpi-value">{{ efficiency|default(0)|round(1) }}%</div>
+    </div>
+</div>
+
+<div class="action-bar">
+    <button hx-post="/scan" hx-target="#scan-results" hx-indicator="#spinner">
+        Scan Now
+    </button>
+    
+    <label class="toggle-switch">
+        <input type="checkbox" id="dry-run-toggle">
+        <span>Dry Run Mode</span>
+    </label>
+    
+    <div id="spinner" class="htmx-indicator">Scanning...</div>
+</div>
+
+<div id="scan-results">
+    <p style="color: var(--text-muted);">Click "Scan Now" to analyze Docker images.</p>
+</div>
+{% endblock %}
