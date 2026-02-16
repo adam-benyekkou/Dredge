@@ -70,3 +70,6 @@ Thumbs.db
 
 # Agent Rules
 .clinerules
+
+# Documentation (local only)
+docs/
