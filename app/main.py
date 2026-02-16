@@ -2,7 +2,8 @@
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
+
+from app.web.routes import router
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -14,11 +15,11 @@ app = FastAPI(
 # Mount static files
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# Configure Jinja2 templates
-templates = Jinja2Templates(directory="templates")
+# Include web routes
+app.include_router(router)
 
 
-@app.get("/")
-async def root():
+@app.get("/health")
+async def health_check():
     """Health check endpoint"""
     return {"status": "ok", "app": "Dredge", "version": "0.1.0"}
