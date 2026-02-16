@@ -5,13 +5,13 @@ WORKDIR /app
 # Copy dependency specification
 COPY pyproject.toml ./
 
-# Install dependencies
-RUN pip install --no-cache-dir -e .
-
-# Copy application code
+# Copy application code (needed for editable install or package discovery)
 COPY app ./app
 COPY templates ./templates
 COPY static ./static
+
+# Install dependencies
+RUN pip install --no-cache-dir .
 
 # Expose port
 EXPOSE 8000

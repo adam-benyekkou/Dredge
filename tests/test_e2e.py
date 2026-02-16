@@ -53,9 +53,10 @@ async def test_purge_image_endpoint():
     """Test purge image endpoint"""
     digest = "sha256:1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        # Mock LocalDockerClient.delete_image
-        with patch("app.web.routes.LocalDockerClient.delete_image") as mock_delete:
-            mock_delete.return_value = {
+        # Mock RegistryClientFactory.get_client().delete_image
+        with patch("app.web.routes.RegistryClientFactory.get_client") as mock_get_client:
+            mock_client = mock_get_client.return_value
+            mock_client.delete_image.return_value = {
                 "success": True,
                 "image_id": digest,
                 "image_tags": ["test:latest"],

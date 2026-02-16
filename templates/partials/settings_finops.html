@@ -1,0 +1,39 @@
+<div class="card">
+    <header>
+        <h3 style="margin-bottom: 0;">FinOps Configuration</h3>
+        <p style="color: var(--text-muted); font-size: 0.9rem;">Adjust cost estimation parameters.</p>
+    </header>
+    
+    <form hx-post="/settings" hx-target="#settings-content" hx-push-url="false">
+        <input type="hidden" name="section" value="finops">
+        
+        <label for="provider_name">Cloud Provider
+            <select id="provider_name" name="provider_name">
+                <option value="AWS" {% if settings.provider_name == 'AWS' %}selected{% endif %}>Amazon Web Services (ECR)</option>
+                <option value="Azure" {% if settings.provider_name == 'Azure' %}selected{% endif %}>Microsoft Azure (ACR)</option>
+                <option value="GCP" {% if settings.provider_name == 'GCP' %}selected{% endif %}>Google Cloud (GCR/GAR)</option>
+                <option value="Custom" {% if settings.provider_name == 'Custom' %}selected{% endif %}>Custom / On-Premise</option>
+            </select>
+        </label>
+
+        <div class="grid">
+            <label for="custom_price_per_gb">Price per GB / Month
+                <input type="number" id="custom_price_per_gb" name="custom_price_per_gb" step="0.01" value="{{ settings.custom_price_per_gb }}">
+            </label>
+            <label for="currency_symbol">Currency
+                <select id="currency_symbol" name="currency_symbol">
+                    <option value="$" {% if settings.currency_symbol == '$' %}selected{% endif %}>USD ($)</option>
+                    <option value="€" {% if settings.currency_symbol == '€' %}selected{% endif %}>EUR (€)</option>
+                    <option value="£" {% if settings.currency_symbol == '£' %}selected{% endif %}>GBP (£)</option>
+                </select>
+            </label>
+        </div>
+
+        <footer style="margin-top: 1rem;">
+            <button type="submit" class="primary">Save Configuration</button>
+            {% if updated %}
+                <span style="color: #2ECC71; margin-left: 1rem; font-size: 0.9rem;">✓ Settings saved</span>
+            {% endif %}
+        </footer>
+    </form>
+</div>

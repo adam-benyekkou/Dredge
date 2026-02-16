@@ -1,16 +1,17 @@
 """API routes for Dredge"""
 
 from html import escape
-from fastapi import APIRouter, Request, Depends, HTTPException
+from fastapi import APIRouter, Request, Depends, HTTPException, Response
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 import logging
 from sqlmodel import Session, select, col
 
-from app.core.registry import LocalDockerClient
+from app.core.registry import RegistryClientFactory
 from app.core.finops import CostCalculator
 from app.core.db import get_session
-from app.models import ImageStatus, AuditLog
+from app.core.notify import send_notification
+from app.models import ImageStatus, AuditLog, RegistryConfig, RegistryType, AppSettings, CleanupPolicy, ImageArtifact
 
 router = APIRouter()
 templates = Jinja2Templates(directory="templates")
@@ -18,53 +19,103 @@ logger = logging.getLogger(__name__)
 
 
 @router.get("/", response_class=HTMLResponse)
-async def dashboard(request: Request):
+async def dashboard(request: Request, session: Session = Depends(get_session)):
     """Render the dashboard"""
+    # Fetch settings
+    settings = session.get(AppSettings, 1)
+    
+    # Fetch registry count
+    reg_count = session.query(RegistryConfig).count()
+    
     return templates.TemplateResponse(
+        request,
         "dashboard.html",
         {
-            "request": request,
             "monthly_waste": 0,
             "reclaimable_gb": 0,
             "efficiency": 100,
+            "registry_count": reg_count,
+            "settings": settings,
         }
     )
 
 
 @router.get("/images", response_class=HTMLResponse)
 async def images_view(request: Request, session: Session = Depends(get_session)):
-    """Render the images view"""
+    """Render the images view with combined results from all registries"""
     try:
-        client = LocalDockerClient()
-        images = client.list_images()
+        source_filter = request.query_params.get("source")
+        settings = session.get(AppSettings, 1)
+        
+        # 1. Fetch Local Images
+        local_client = RegistryClientFactory.get_client()
+        images = local_client.list_images()
+        
+        # 2. Fetch Remote Images (Active Registries Only)
+        remote_configs = session.exec(select(RegistryConfig).where(RegistryConfig.is_active == True)).all()
+        for config in remote_configs:
+            try:
+                remote_client = RegistryClientFactory.get_client(config)
+                images.extend(remote_client.list_images())
+            except Exception as re:
+                logger.error(f"Failed to fetch images from registry {config.name}: {str(re)}")
+
+        # 3. Apply Filtering
+        if source_filter and source_filter != "All":
+            images = [img for img in images if img.source == source_filter]
+        
+        # 4. Collect unique sources for the filter dropdown
+        sources = sorted(list(set(img.source for img in images)) + ["Local"])
+        
     except Exception as e:
         logger.error(f"Failed to fetch images for view: {str(e)}")
         images = []
+        sources = ["Local"]
+        settings = None
         
     return templates.TemplateResponse(
+        request,
         "images.html",
         {
-            "request": request,
             "images": images,
+            "sources": sources,
+            "current_source": source_filter or "All",
+            "settings": settings,
         }
     )
 
 
 @router.get("/volumes", response_class=HTMLResponse)
 async def volumes_view(request: Request, session: Session = Depends(get_session)):
-    """Render the volumes view"""
+    """Render the volumes view with combined results"""
     try:
-        client = LocalDockerClient()
-        volumes = client.list_volumes()
+        source_filter = request.query_params.get("source")
+        settings = session.get(AppSettings, 1)
+        
+        # Local volumes
+        local_client = RegistryClientFactory.get_client()
+        volumes = local_client.list_volumes()
+        
+        # Apply Filtering
+        if source_filter and source_filter != "All":
+            volumes = [v for v in volumes if v.source == source_filter]
+            
+        sources = sorted(list(set(v.source for v in volumes)) + ["Local"])
+        
     except Exception as e:
         logger.error(f"Failed to fetch volumes for view: {str(e)}")
         volumes = []
+        sources = ["Local"]
+        settings = None
         
     return templates.TemplateResponse(
+        request,
         "volumes.html",
         {
-            "request": request,
             "volumes": volumes,
+            "sources": sources,
+            "current_source": source_filter or "All",
+            "settings": settings,
         }
     )
 
@@ -73,7 +124,7 @@ async def volumes_view(request: Request, session: Session = Depends(get_session)
 async def delete_volume(name: str, session: Session = Depends(get_session)):
     """Delete a Docker volume"""
     try:
-        client = LocalDockerClient()
+        client = RegistryClientFactory.get_client()
         result = client.delete_volume(session, name)
         
         if result["success"]:
@@ -95,11 +146,42 @@ async def delete_volume(name: str, session: Session = Depends(get_session)):
 @router.get("/policies", response_class=HTMLResponse)
 async def policies_view(request: Request, session: Session = Depends(get_session)):
     """Render the policies view"""
+    statement = select(CleanupPolicy).limit(1)
+    policy = session.exec(statement).first()
+    
+    if not policy:
+        policy = CleanupPolicy(name="Default Cleanup")
+        session.add(policy)
+        session.commit()
+        session.refresh(policy)
+        
     return templates.TemplateResponse(
+        request,
         "policies.html",
-        {
-            "request": request,
-        }
+        {"policy": policy}
+    )
+
+
+@router.post("/policies", response_class=HTMLResponse)
+async def update_policy(request: Request, session: Session = Depends(get_session)):
+    """Update cleanup policy"""
+    form_data = await request.form()
+    statement = select(CleanupPolicy).limit(1)
+    policy = session.exec(statement).first()
+    
+    if policy:
+        policy.keep_count = int(form_data.get("keep_count", 3))
+        policy.max_age_days = int(form_data.get("max_age_days", 30))
+        policy.regex_whitelist = str(form_data.get("regex_whitelist", ""))
+        policy.enabled = form_data.get("enabled") == "on"
+        
+        session.add(policy)
+        session.commit()
+        
+    return templates.TemplateResponse(
+        request,
+        "policies.html",
+        {"policy": policy, "updated": True}
     )
 
 
@@ -109,22 +191,175 @@ async def logs_view(request: Request, session: Session = Depends(get_session)):
     # Fetch latest 50 logs
     statement = select(AuditLog).order_by(col(AuditLog.timestamp).desc()).limit(50)
     logs = session.exec(statement).all()
+    settings = session.get(AppSettings, 1)
     
     return templates.TemplateResponse(
+        request,
         "logs.html",
         {
-            "request": request,
             "logs": logs,
+            "settings": settings,
         }
     )
 
 
+@router.get("/registries", response_class=HTMLResponse)
+async def registries_view(request: Request, session: Session = Depends(get_session)):
+    """Render the registries management view"""
+    statement = select(RegistryConfig).order_by(RegistryConfig.created_at)
+    registries = session.exec(statement).all()
+    
+    return templates.TemplateResponse(
+        request,
+        "registries.html",
+        {
+            "registries": registries,
+        }
+    )
+
+
+@router.post("/registries", response_class=HTMLResponse)
+async def add_registry(request: Request, session: Session = Depends(get_session)):
+    """Add a new remote registry"""
+    try:
+        form_data = await request.form()
+        
+        name = str(form_data.get("name", "")).strip()
+        reg_type = str(form_data.get("type", "DOCKERHUB"))
+        endpoint = str(form_data.get("endpoint", "")).strip()
+        username = str(form_data.get("username", "")).strip() or None
+        password = str(form_data.get("password", "")).strip() or None
+        
+        # Validation
+        if not name:
+            raise HTTPException(status_code=400, detail="Registry name is required")
+        
+        new_reg = RegistryConfig(
+            name=name,
+            type=RegistryType(reg_type),
+            endpoint=endpoint,
+            username=username,
+            password=password,
+        )
+        
+        session.add(new_reg)
+        session.commit()
+        
+        logger.info(f"Added new registry: {name} (Type: {reg_type})")
+        
+    except Exception as e:
+        logger.error(f"Failed to add registry: {str(e)}")
+        # In a real app, we'd return a better error to the UI
+    
+    # Return the updated list via HTMX
+    statement = select(RegistryConfig).order_by(RegistryConfig.created_at)
+    registries = session.exec(statement).all()
+    
+    # If HTMX request, we return the partial
+    return templates.TemplateResponse(
+        request,
+        "partials/registries_list.html",
+        {
+            "registries": registries,
+        }
+    )
+
+    
+    session.add(new_reg)
+    session.commit()
+    
+    # Return the updated list via HTMX
+    statement = select(RegistryConfig).order_by(RegistryConfig.created_at)
+    registries = session.exec(statement).all()
+    
+    return templates.TemplateResponse(
+        "registries.html",
+        {
+            "request": request,
+            "registries": registries,
+        },
+        block_name="registries_list" # Note: Jinja2Templates doesn't support block_name by default, I'll return full list or partial
+    )
+
+
+@router.delete("/registries/{reg_id}", response_class=HTMLResponse)
+async def delete_registry(reg_id: int, session: Session = Depends(get_session)):
+    """Delete a registry configuration"""
+    registry = session.get(RegistryConfig, reg_id)
+    if registry:
+        session.delete(registry)
+        session.commit()
+    return HTMLResponse(content="")
+
+
+@router.get("/settings", response_class=HTMLResponse)
+async def settings_view(request: Request, session: Session = Depends(get_session)):
+    """Render the global settings view"""
+    settings = session.get(AppSettings, 1)
+    section = request.query_params.get("section", "finops")
+    
+    context = {
+        "request": request,
+        "settings": settings,
+        "section": section
+    }
+    
+    if request.headers.get("HX-Request"):
+        return templates.TemplateResponse(f"partials/settings_{section}.html", context)
+        
+    return templates.TemplateResponse("settings.html", context)
+
+
+@router.post("/settings", response_class=HTMLResponse)
+async def update_settings(request: Request, session: Session = Depends(get_session)):
+    """Update global application settings"""
+    form_data = await request.form()
+    settings = session.get(AppSettings, 1)
+    section = str(form_data.get("section", "finops"))
+    
+    if settings:
+        if section == "finops":
+            settings.provider_name = str(form_data.get("provider_name"))
+            settings.custom_price_per_gb = float(form_data.get("custom_price_per_gb", 0.10))
+            settings.currency_symbol = str(form_data.get("currency_symbol", "$"))
+        elif section == "notifications":
+            settings.notification_urls = str(form_data.get("notification_urls", "")).strip() or None
+            
+        settings.updated_at = datetime.utcnow()
+        session.add(settings)
+        session.commit()
+        
+    return templates.TemplateResponse(
+        f"partials/settings_{section}.html",
+        {"settings": settings, "updated": True, "section": section}
+    )
+
+
+@router.post("/settings/reset", response_class=HTMLResponse)
+async def reset_database(request: Request, session: Session = Depends(get_session)):
+    """Reset the database (Danger Zone)"""
+    # Logic to flush tables could go here
+    # For MVP just return success message
+    return HTMLResponse(content="<p style='color: var(--danger);'>Database reset not fully implemented for safety.</p>")
+
+
+@router.post("/settings/notify-test", response_class=HTMLResponse)
+async def test_notification(response: Response):
+    """Send a test notification via Apprise"""
+    await send_notification(
+        title="Dredge - Test Notification",
+        body="If you're reading this, your ChatOps integration is working! ⚓"
+    )
+    response.headers["HX-Trigger"] = '{"showMessage": "Test Notification Sent"}'
+    return HTMLResponse(content="")
+
+
 @router.post("/scan", response_class=HTMLResponse)
-async def scan_images(request: Request, session: Session = Depends(get_session)):
+async def scan_images(request: Request, response: Response, session: Session = Depends(get_session)):
     """Scan Docker images and return HTML table rows"""
     try:
         # Initialize Docker client
-        client = LocalDockerClient()
+        client = RegistryClientFactory.get_client()
         
         # Get all images
         images = client.list_images()
@@ -132,6 +367,16 @@ async def scan_images(request: Request, session: Session = Depends(get_session))
         # Calculate total stats
         total_size_bytes = sum(img.size_bytes for img in images)
         total_cost = CostCalculator.calculate_monthly_cost(total_size_bytes)
+        
+        # Trigger Toast
+        response.headers["HX-Trigger"] = '{"showMessage": "Scan Complete: ' + f'{total_size_bytes / (1024**3):.2f} GB' + ' analyzed"}'
+        
+        # Phase 5: Trigger Notification
+        if total_size_bytes > 0:
+            await send_notification(
+                title="Dredge Scan Completed",
+                body=f"Identified {total_size_bytes / (1024**3):.2f} GB of potential waste across local/remote registries."
+            )
         
         # Build HTML response for HTMX (WITH XSS PROTECTION)
         html_rows = []
@@ -210,20 +455,56 @@ async def scan_images(request: Request, session: Session = Depends(get_session))
         )
 
 
+@router.post("/images/{digest}/restore", response_class=HTMLResponse)
+async def restore_image(digest: str, response: Response, session: Session = Depends(get_session)):
+    """Restore a quarantined image to ACTIVE status"""
+    try:
+        statement = select(ImageArtifact).where(ImageArtifact.digest == digest)
+        image = session.exec(statement).first()
+        
+        if not image:
+            # Try finding in Local Docker
+            client = RegistryClientFactory.get_client()
+            images = client.list_images()
+            image = next((img for img in images if img.digest == digest), None)
+            if image:
+                session.add(image)
+        
+        if image:
+            image.status = ImageStatus.ACTIVE
+            image.expires_at = None
+            session.add(image)
+            session.commit()
+            
+            response.headers["HX-Trigger"] = '{"showMessage": "Image Restored to Active"}'
+            return HTMLResponse(content="") # Row will be removed or updated via frontend logic
+            
+        raise HTTPException(status_code=404, detail="Image not found")
+    except Exception as e:
+        logger.error(f"Restore failed: {str(e)}")
+        return HTMLResponse(content=f"Error: {str(e)}", status_code=500)
 @router.delete("/images/{digest}", response_class=HTMLResponse)
-async def purge_image(digest: str, session: Session = Depends(get_session)):
+async def purge_image(digest: str, response: Response, session: Session = Depends(get_session)):
     """Purge (permanently delete) a Docker image"""
     try:
         # SECURITY FIX: The registry client already validates digest format
-        client = LocalDockerClient()
+        client = RegistryClientFactory.get_client()
         
         # Perform real deletion (dry_run=False)
         result = client.delete_image(session, digest, dry_run=False)
         
         if result["success"]:
             session.commit()
-            # Return empty response or something indicating success for HTMX to swap
-            # Since target is the row itself, returning empty string removes the row
+            
+            # Phase 5: Trigger Notification
+            settings = session.get(AppSettings, 1)
+            symbol = settings.currency_symbol if settings else "$"
+            await send_notification(
+                title="Image Purged",
+                body=f"Successfully purged image {digest}. Savings: {symbol}{result['savings_usd']:.2f}/mo."
+            )
+            
+            response.headers["HX-Trigger"] = '{"showMessage": "Image Purged Successfully"}'
             return HTMLResponse(content="")
         else:
             logger.warning(f"Purge failed for {digest}: {result['message']}")

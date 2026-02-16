@@ -1,0 +1,139 @@
+{% extends "layout.html" %}
+
+{% block title %}Settings - Dredge{% endblock %}
+
+{% block extra_head %}
+<style>
+    .settings-layout {
+        display: flex;
+        gap: 2rem;
+    }
+    
+    .settings-nav {
+        width: 240px;
+        flex-shrink: 0;
+    }
+    
+    .settings-nav-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+    
+    .settings-nav-item {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.75rem 1rem;
+        border-radius: 8px;
+        text-decoration: none;
+        color: var(--text-muted);
+        transition: all 0.2s ease;
+        cursor: pointer;
+        font-weight: 500;
+        background: transparent;
+        border: 1px solid transparent;
+    }
+    
+    .settings-nav-item:hover {
+        background-color: rgba(119, 141, 169, 0.1);
+        color: var(--pico-color);
+    }
+    
+    .settings-nav-item.active {
+        background-color: var(--pico-card-background-color);
+        color: var(--accent);
+        border-color: rgba(72, 202, 228, 0.2);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    }
+    
+    .settings-content {
+        flex: 1;
+        min-width: 0;
+    }
+
+    @media (max-width: 992px) {
+        .settings-layout {
+            flex-direction: column;
+        }
+        .settings-nav {
+            width: 100%;
+        }
+        .settings-nav-list {
+            flex-direction: row;
+            overflow-x: auto;
+            padding-bottom: 0.5rem;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block page_title %}
+    <h1>Global Settings</h1>
+{% endblock %}
+
+{% block content %}
+<div class="settings-layout">
+    <!-- Sub-navigation -->
+    <aside class="settings-nav">
+        <nav>
+            <ul class="settings-nav-list">
+                <li>
+                    <a class="settings-nav-item {% if section == 'finops' %}active{% endif %}"
+                       hx-get="/settings?section=finops"
+                       hx-target="#settings-content"
+                       hx-push-url="true"
+                       onclick="updateActiveNav(this)">
+                        <i data-lucide="bar-chart-3"></i>
+                        FinOps Configuration
+                    </a>
+                </li>
+                <li>
+                    <a class="settings-nav-item {% if section == 'notifications' %}active{% endif %}"
+                       hx-get="/settings?section=notifications"
+                       hx-target="#settings-content"
+                       hx-push-url="true"
+                       onclick="updateActiveNav(this)">
+                        <i data-lucide="message-square"></i>
+                        Notifications
+                    </a>
+                </li>
+                <li>
+                    <a class="settings-nav-item {% if section == 'system' %}active{% endif %}"
+                       hx-get="/settings?section=system"
+                       hx-target="#settings-content"
+                       hx-push-url="true"
+                       onclick="updateActiveNav(this)">
+                        <i data-lucide="shield-alert"></i>
+                        System & Security
+                    </a>
+                </li>
+            </ul>
+        </nav>
+    </aside>
+
+    <!-- Content Pane -->
+    <main class="settings-content" id="settings-content">
+        {% include "partials/settings_" + section + ".html" %}
+    </main>
+</div>
+
+<script>
+function updateActiveNav(el) {
+    document.querySelectorAll('.settings-nav-item').forEach(item => {
+        item.classList.remove('active');
+    });
+    el.classList.add('active');
+}
+
+// Re-init icons when partial is swapped
+document.body.addEventListener('htmx:afterSwap', function(evt) {
+    if (evt.detail.target.id === "settings-content") {
+        lucide.createIcons();
+    }
+});
+</script>
+{% endblock %}

@@ -74,16 +74,27 @@
 {% block page_title %}<h1>Volumes</h1>{% endblock %}
 
 {% block top_actions %}
-    <button 
-        hx-get="/volumes" 
-        hx-target="#volume-table"
-        hx-select="#volume-table"
-        class="secondary outline"
-        style="margin: 0; padding: 0.5rem 1rem; font-size: 0.9rem;"
-    >
-        <i data-lucide="refresh-cw" style="width: 16px; height: 16px; vertical-align: middle; margin-right: 0.25rem;"></i>
-        Refresh List
-    </button>
+    <div style="display: flex; gap: 1rem; align-items: center;">
+        <form hx-get="/volumes" hx-target="body" hx-push-url="true" style="margin: 0;">
+            <select name="source" onchange="this.form.submit()" style="margin: 0; padding: 0.4rem 2rem 0.4rem 1rem; font-size: 0.85rem; height: auto;">
+                <option value="All" {% if current_source == 'All' %}selected{% endif %}>All Sources</option>
+                {% for source in sources %}
+                    <option value="{{ source }}" {% if current_source == source %}selected{% endif %}>{{ source }}</option>
+                {% endfor %}
+            </select>
+        </form>
+
+        <button 
+            hx-get="/volumes" 
+            hx-target="#volume-table"
+            hx-select="#volume-table"
+            class="secondary outline"
+            style="margin: 0; padding: 0.5rem 1rem; font-size: 0.9rem;"
+        >
+            <i data-lucide="refresh-cw" style="width: 16px; height: 16px; vertical-align: middle; margin-right: 0.25rem;"></i>
+            Refresh List
+        </button>
+    </div>
 {% endblock %}
 
 {% block content %}
@@ -93,6 +104,7 @@
             <tr>
                 <th>Volume Name</th>
                 <th>Driver</th>
+                <th>Source</th>
                 <th>Created</th>
                 <th>Size</th>
                 <th>Monthly Cost</th>
@@ -106,9 +118,10 @@
                 <tr id="volume-{{ volume.name }}">
                     <td>{{ volume.name }}</td>
                     <td>{{ volume.driver }}</td>
+                    <td><span class="badge" style="background-color: rgba(72, 202, 228, 0.1); color: var(--accent);">{{ volume.source }}</span></td>
                     <td>{{ volume.created_at.strftime('%Y-%m-%d %H:%M') if volume.created_at else 'N/A' }}</td>
                     <td>{{ (volume.size_bytes / 1024**2)|round(2) }} MB</td>
-                    <td>${{ (volume.size_bytes / 1024**3 * 0.10)|round(2) }}/mo</td>
+                    <td>{{ settings.currency_symbol }}{{ (volume.size_bytes / 1024**3 * settings.custom_price_per_gb)|round(2) }}/mo</td>
                     <td>
                         <span class="badge {{ volume.status.lower() }}">
                             {{ volume.status }}
@@ -129,8 +142,8 @@
                 {% endfor %}
             {% else %}
                 <tr>
-                    <td colspan="7" style="text-align: center; color: var(--text-muted);">
-                        No volumes found.
+                    <td colspan="8" style="text-align: center; color: var(--text-muted);">
+                        No volumes found for the selected source.
                     </td>
                 </tr>
             {% endif %}

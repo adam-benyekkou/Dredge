@@ -11,6 +11,10 @@
     <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
 
+    <!-- Toastify.js -->
+    <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
+
     <!-- HTMX -->
     <script src="https://unpkg.com/htmx.org@1.9.10"></script>
     
@@ -250,6 +254,11 @@
             <!-- CONFIGURE Group -->
             <div class="nav-group-label">Configure</div>
             
+            <a href="/registries" class="nav-link {% if request.url.path == '/registries' %}active{% endif %}">
+                <i data-lucide="database"></i>
+                <span>Registries</span>
+            </a>
+
             <a href="/policies" class="nav-link {% if request.url.path == '/policies' %}active{% endif %}">
                 <i data-lucide="shield-check"></i>
                 <span>Policies</span>
@@ -258,6 +267,11 @@
             <a href="/logs" class="nav-link {% if request.url.path == '/logs' %}active{% endif %}">
                 <i data-lucide="clipboard-list"></i>
                 <span>Logs</span>
+            </a>
+
+            <a href="/settings" class="nav-link {% if request.url.path == '/settings' %}active{% endif %}">
+                <i data-lucide="settings"></i>
+                <span>Settings</span>
             </a>
         </nav>
         
@@ -309,6 +323,23 @@
         // Re-initialize icons after HTMX swaps
         document.body.addEventListener('htmx:afterSwap', function(evt) {
             lucide.createIcons();
+        });
+
+        // Toast Notification Listener
+        document.body.addEventListener('showMessage', function(evt) {
+            const message = evt.detail.value || evt.detail;
+            Toastify({
+                text: message,
+                duration: 3000,
+                gravity: "top",
+                position: "right",
+                style: {
+                    background: "linear-gradient(135deg, #1B263B, #0D1B2A)",
+                    border: "1px solid var(--accent)",
+                    color: "var(--pico-color)",
+                    borderRadius: "8px"
+                }
+            }).showToast();
         });
     </script>
 </body>

@@ -21,6 +21,17 @@ class ImageStatus(str, Enum):
     DELETED = "DELETED"
 
 
+class RegistryType(str, Enum):
+    """Supported registry providers."""
+    DOCKERHUB = "DOCKERHUB"
+    GHCR = "GHCR"
+    ECR = "ECR"
+    ACR = "ACR"
+    GCR = "GCR"
+    GAR = "GAR"
+    CUSTOM = "CUSTOM"
+
+
 class VolumeStatus(str, Enum):
     """Volume lifecycle status.
     
@@ -55,6 +66,7 @@ class ImageArtifact(SQLModel, table=True):
     size_bytes: int = Field(default=0)
     created_at: datetime = Field(default_factory=datetime.utcnow)
     digest: str = Field(default="", max_length=255)
+    source: str = Field(default="Local", max_length=255)
     status: ImageStatus = Field(default=ImageStatus.ACTIVE)
     expires_at: Optional[datetime] = Field(default=None)
 
@@ -78,6 +90,7 @@ class VolumeArtifact(SQLModel, table=True):
     name: str = Field(max_length=255, index=True)
     driver: str = Field(max_length=100)
     size_bytes: int = Field(default=0)
+    source: str = Field(default="Local", max_length=255)
     created_at: Optional[datetime] = Field(default=None)
     status: VolumeStatus = Field(default=VolumeStatus.ACTIVE)
     labels: List[str] = Field(default=[], sa_column=Column(SAJSON))
@@ -129,3 +142,43 @@ class AuditLog(SQLModel, table=True):
     savings_usd: float = Field(default=0.0)
     timestamp: datetime = Field(default_factory=datetime.utcnow, index=True)
     dry_run: bool = Field(default=False)
+
+
+class RegistryConfig(SQLModel, table=True):
+    """Configuration for remote Docker registries.
+    
+    Stores credentials and endpoints for scanning remote registries.
+    
+    Attributes:
+        id: Primary key identifier
+        name: Human-readable name (e.g., 'Docker Hub Prod')
+        type: Registry provider type (DOCKERHUB, ECR, etc.)
+        endpoint: Registry URL/endpoint
+        username: Authentication username
+        password: Authentication password/token (plain text for MVP, consider encryption)
+        is_active: Whether this registry is enabled for scanning
+        created_at: Creation timestamp
+    """
+    
+    id: Optional[int] = Field(default=None, primary_key=True)
+    name: str = Field(max_length=255)
+    type: RegistryType = Field(default=RegistryType.DOCKERHUB)
+    endpoint: str = Field(default="", max_length=500)
+    username: Optional[str] = Field(default=None, max_length=255)
+    password: Optional[str] = Field(default=None, max_length=1000)
+    is_active: bool = Field(default=True)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class AppSettings(SQLModel, table=True):
+    """Global application settings for FinOps and UI.
+    
+    Singleton row to store user preferences.
+    """
+    
+    id: int = Field(default=1, primary_key=True)
+    provider_name: str = Field(default="AWS", max_length=100)
+    custom_price_per_gb: float = Field(default=0.10)
+    currency_symbol: str = Field(default="$", max_length=5)
+    notification_urls: Optional[str] = Field(default=None, max_length=1000)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)

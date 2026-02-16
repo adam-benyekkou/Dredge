@@ -5,42 +5,92 @@
 {% block page_title %}<h1>Policies</h1>{% endblock %}
 
 {% block content %}
-<div class="card">
-    <header>Automated Cleanup Rules</header>
-    <p>Define rules to automatically quarantine and remove unused Docker images.</p>
-    
-    <table role="grid">
-        <thead>
-            <tr>
-                <th>Policy Name</th>
-                <th>Keep Count</th>
-                <th>Max Age</th>
-                <th>Whitelist</th>
-                <th>Enabled</th>
-                <th>Actions</th>
-            </tr>
-        </thead>
-        <tbody>
-            <tr>
-                <td>Default Cleanup</td>
-                <td>3</td>
-                <td>30 days</td>
-                <td><code>^prod-.*</code></td>
-                <td><span class="badge active">Yes</span></td>
-                <td>
-                    <button class="action-btn" disabled>Edit</button>
-                </td>
-            </tr>
-        </tbody>
-    </table>
-    
-    <footer>
-        <button disabled>Add New Policy</button>
-    </footer>
+<div class="policies-container">
+    <div class="grid">
+        <!-- Policy Editor -->
+        <div class="card">
+            <header>
+                <h3 style="margin-bottom: 0;">Cleanup Strategy</h3>
+                <p style="color: var(--text-muted); font-size: 0.9rem;">Define how Dredge identifies waste.</p>
+            </header>
+
+            <form hx-post="/policies" hx-target="body">
+                <div class="grid">
+                    <label for="keep_count">Keep Last X Versions
+                        <input type="number" id="keep_count" name="keep_count" value="{{ policy.keep_count }}" min="0">
+                        <small>Never delete the most recent X images of a repository.</small>
+                    </label>
+                    <label for="max_age_days">Max Age (Days)
+                        <input type="number" id="max_age_days" name="max_age_days" value="{{ policy.max_age_days }}" min="0">
+                        <small>Mark images older than this as waste.</small>
+                    </label>
+                </div>
+
+                <label for="regex_whitelist">Protected Patterns (Regex)
+                    <textarea id="regex_whitelist" name="regex_whitelist" rows="3" placeholder="e.g. ^prod-.*&#10;postgres:14">{{ policy.regex_whitelist }}</textarea>
+                    <small>One pattern per line. Matches will NEVER be deleted.</small>
+                </label>
+
+                <label for="enabled">
+                    <input type="checkbox" id="enabled" name="enabled" role="switch" {% if policy.enabled %}checked{% endif %}>
+                    Enable automated scans
+                </label>
+
+                <footer style="margin-top: 1rem;">
+                    <button type="submit" class="primary">Update Policy</button>
+                    {% if updated %}
+                        <span style="color: #2ECC71; margin-left: 1rem; font-size: 0.9rem;">✓ Policy updated</span>
+                    {% endif %}
+                </footer>
+            </form>
+        </div>
+
+        <!-- Policy Tester -->
+        <div class="card">
+            <header>
+                <h3 style="margin-bottom: 0;">Policy Tester</h3>
+                <p style="color: var(--text-muted); font-size: 0.9rem;">Test a tag against your rules.</p>
+            </header>
+            
+            <label for="test_tag">Image Tag to Test
+                <input type="text" id="test_tag" placeholder="e.g. my-app:prod-v1" oninput="testPolicy(this.value)">
+            </label>
+
+            <div id="test-result" style="padding: 1rem; border-radius: 8px; background-color: rgba(119, 141, 169, 0.1); text-align: center; font-weight: 600;">
+                Enter a tag to see results
+            </div>
+        </div>
+    </div>
 </div>
 
-<article>
-    <h3>Phase 2.5 Preview</h3>
-    <p>Automated policy execution engine will be implemented in the next sub-phase.</p>
-</article>
+<script>
+function testPolicy(val) {
+    const resultDiv = document.getElementById('test-result');
+    if (!val) {
+        resultDiv.innerText = "Enter a tag to see results";
+        resultDiv.style.color = "inherit";
+        return;
+    }
+
+    const whitelist = `{{ policy.regex_whitelist }}`.split('\n').filter(p => p.trim());
+    let protected = false;
+    
+    for (let pattern of whitelist) {
+        try {
+            if (new RegExp(pattern.trim()).test(val)) {
+                protected = true;
+                break;
+            }
+        } catch(e) {}
+    }
+
+    if (protected) {
+        resultDiv.innerText = "SAFE (Whitelisted)";
+        resultDiv.style.color = "var(--accent)";
+    } else {
+        resultDiv.innerText = "TARGETED (Would be scanned)";
+        resultDiv.style.color = "var(--danger)";
+    }
+}
+</script>
 {% endblock %}

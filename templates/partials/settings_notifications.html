@@ -1,0 +1,30 @@
+<div class="card">
+    <header>
+        <h3 style="margin-bottom: 0;">Multi-Channel Notifications</h3>
+        <p style="color: var(--text-muted); font-size: 0.9rem;">Integrate with Discord, Slack, and Telegram via ChatOps.</p>
+    </header>
+
+    <form hx-post="/settings" hx-target="#settings-content">
+        <input type="hidden" name="section" value="notifications">
+
+        <label for="notification_urls">Apprise URLs (Comma Separated)
+            <textarea id="notification_urls" name="notification_urls" rows="3" placeholder="discord://webhook_id, slack://token, tgram://bot_token">{{ settings.notification_urls or '' }}</textarea>
+            <small>Format: provider://token, provider://webhook. Supports 50+ services.</small>
+        </label>
+
+        <div style="display: flex; gap: 1rem; align-items: center; margin-top: 1rem;">
+            <button type="submit" class="primary">Save Channels</button>
+            <button type="button" class="outline secondary" hx-post="/settings/notify-test" hx-swap="none">
+                <i data-lucide="bell-ring" style="width: 16px; height: 16px; vertical-align: middle; margin-right: 0.25rem;"></i>
+                Test Notification
+            </button>
+            {% if updated %}
+                <span style="color: #2ECC71; margin-left: 1rem; font-size: 0.9rem;">✓ Channels saved</span>
+            {% endif %}
+        </div>
+    </form>
+</div>
+
+<script>
+    lucide.createIcons();
+</script>

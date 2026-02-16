@@ -78,15 +78,26 @@
 {% block page_title %}<h1>Images</h1>{% endblock %}
 
 {% block top_actions %}
-    <button 
-        hx-post="/scan" 
-        hx-target="#image-table" 
-        class="secondary outline"
-        style="margin: 0; padding: 0.5rem 1rem; font-size: 0.9rem;"
-    >
-        <i data-lucide="refresh-cw" style="width: 16px; height: 16px; vertical-align: middle; margin-right: 0.25rem;"></i>
-        Refresh List
-    </button>
+    <div style="display: flex; gap: 1rem; align-items: center;">
+        <form hx-get="/images" hx-target="body" hx-push-url="true" style="margin: 0;">
+            <select name="source" onchange="this.form.submit()" style="margin: 0; padding: 0.4rem 2rem 0.4rem 1rem; font-size: 0.85rem; height: auto;">
+                <option value="All" {% if current_source == 'All' %}selected{% endif %}>All Sources</option>
+                {% for source in sources %}
+                    <option value="{{ source }}" {% if current_source == source %}selected{% endif %}>{{ source }}</option>
+                {% endfor %}
+            </select>
+        </form>
+
+        <button 
+            hx-post="/scan" 
+            hx-target="#image-table" 
+            class="secondary outline"
+            style="margin: 0; padding: 0.5rem 1rem; font-size: 0.9rem;"
+        >
+            <i data-lucide="refresh-cw" style="width: 16px; height: 16px; vertical-align: middle; margin-right: 0.25rem;"></i>
+            Refresh List
+        </button>
+    </div>
 {% endblock %}
 
 {% block content %}
@@ -97,6 +108,7 @@
                 <th><input type="checkbox" id="select-all"></th>
                 <th>Repository</th>
                 <th>Tag</th>
+                <th>Source</th>
                 <th>Size</th>
                 <th>Created</th>
                 <th>Status</th>
@@ -111,6 +123,7 @@
                     <td><input type="checkbox" name="image-select" value="{{ image.digest }}"></td>
                     <td>{{ image.tags[0].split(':')[0] if image.tags else 'N/A' }}</td>
                     <td>{{ image.tags[0].split(':')[1] if ':' in (image.tags[0] if image.tags else '') else 'latest' }}</td>
+                    <td><span class="badge" style="background-color: rgba(72, 202, 228, 0.1); color: var(--accent);">{{ image.source }}</span></td>
                     <td>{{ (image.size_bytes / 1024**3)|round(2) }} GB</td>
                     <td>{{ image.created_at.strftime('%Y-%m-%d %H:%M') if image.created_at else 'N/A' }}</td>
                     <td>
@@ -118,24 +131,37 @@
                             {{ image.status }}
                         </span>
                     </td>
-                    <td>${{ (image.size_bytes / 1024**3 * 0.10)|round(2) }}/mo</td>
+                    <td>{{ settings.currency_symbol }}{{ (image.size_bytes / 1024**3 * settings.custom_price_per_gb)|round(2) }}/mo</td>
                     <td>
-                        <button 
-                            class="action-btn danger" 
-                            hx-delete="/images/{{ image.digest }}"
-                            hx-confirm="Are you sure you want to purge this image?"
-                            hx-target="#image-{{ image.digest.replace(':', '-') }}"
-                            hx-swap="outerHTML"
-                        >
-                            Purge
-                        </button>
+                        <div style="display: flex; gap: 0.25rem;">
+                            {% if image.status == 'QUARANTINED' %}
+                            <button 
+                                class="action-btn" 
+                                style="background-color: var(--accent); border-color: var(--accent); color: var(--pico-background-color);"
+                                hx-post="/images/{{ image.digest }}/restore"
+                                hx-target="#image-{{ image.digest.replace(':', '-') }}"
+                                hx-swap="outerHTML"
+                            >
+                                Restore
+                            </button>
+                            {% endif %}
+                            <button 
+                                class="action-btn danger" 
+                                hx-delete="/images/{{ image.digest }}"
+                                hx-confirm="Are you sure you want to purge this image?"
+                                hx-target="#image-{{ image.digest.replace(':', '-') }}"
+                                hx-swap="outerHTML"
+                            >
+                                Purge
+                            </button>
+                        </div>
                     </td>
                 </tr>
                 {% endfor %}
             {% else %}
                 <tr>
-                    <td colspan="8" style="text-align: center; color: var(--text-muted);">
-                        No images found. Click "Scan Now" from the dashboard.
+                    <td colspan="9" style="text-align: center; color: var(--text-muted);">
+                        No images found for the selected source.
                     </td>
                 </tr>
             {% endif %}

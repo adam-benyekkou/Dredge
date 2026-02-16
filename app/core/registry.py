@@ -1,7 +1,7 @@
 """Docker Registry abstraction"""
 
 from abc import ABC, abstractmethod
-from typing import List
+from typing import List, Optional
 import docker
 from docker.errors import APIError, ImageNotFound, NotFound
 from datetime import datetime
@@ -9,7 +9,7 @@ import re
 import logging
 
 from sqlmodel import Session
-from app.models import ImageArtifact, AuditLog, VolumeArtifact, VolumeStatus
+from app.models import ImageArtifact, AuditLog, VolumeArtifact, VolumeStatus, RegistryConfig, RegistryType
 from app.core.finops import CostCalculator
 
 logger = logging.getLogger(__name__)
@@ -84,7 +84,8 @@ class LocalDockerClient(BaseRegistryClient):
                     created_at=datetime.fromisoformat(
                         img.attrs.get('Created', datetime.utcnow().isoformat()).replace('Z', '+00:00')
                     ),
-                    digest=img.id
+                    digest=img.id,
+                    source="Local"
                 )
                 artifacts.append(artifact)
             
@@ -331,7 +332,8 @@ class LocalDockerClient(BaseRegistryClient):
                     size_bytes=size_bytes,
                     created_at=created_at,
                     status=status,
-                    labels=labels
+                    labels=labels,
+                    source="Local"
                 )
                 artifacts.append(artifact)
             
@@ -420,3 +422,46 @@ class LocalDockerClient(BaseRegistryClient):
         except Exception as e:
             logger.error(f"Failed to delete volume {name}: {e}")
             return {"success": False, "message": f"Failed to delete volume: {str(e)}"}
+
+
+class RemoteRegistryClient(BaseRegistryClient):
+    """Placeholder client for remote registries (ECR, DockerHub, etc.)"""
+    
+    def __init__(self, config: RegistryConfig):
+        self.config = config
+        
+    def list_images(self) -> List[ImageArtifact]:
+        # TODO: Implement remote API calls
+        logger.info(f"Listing images for remote registry: {self.config.name}")
+        # Note: In Phase 3 implementation, this would return real data
+        # For now, we return empty list but ensure models would have source=self.config.name
+        return []
+        
+    def get_manifest_size(self, digest: str) -> int:
+        return 0
+        
+    def delete_image(self, session: Session, image_id: str, dry_run: bool = True, force: bool = False) -> dict:
+        return {"success": False, "message": "Remote deletion not yet implemented"}
+
+    def list_volumes(self) -> List[VolumeArtifact]:
+        return []
+
+    def delete_volume(self, session: Session, name: str, force: bool = False) -> dict:
+        return {"success": False, "message": "Remote volumes not supported"}
+
+
+class RegistryClientFactory:
+    """Factory for creating registry clients based on configuration"""
+    
+    @staticmethod
+    def get_client(config: Optional[RegistryConfig] = None) -> BaseRegistryClient:
+        """Get the appropriate registry client.
+        
+        If no config is provided, returns the LocalDockerClient.
+        """
+        if config is None:
+            return LocalDockerClient()
+        
+        # In Phase 3, we would branch here based on config.type
+        # For now, return a placeholder RemoteRegistryClient
+        return RemoteRegistryClient(config)

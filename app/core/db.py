@@ -26,6 +26,14 @@ def init_db():
             connection.exec_driver_sql("PRAGMA synchronous=NORMAL;")
     
     SQLModel.metadata.create_all(engine)
+    
+    # Initialize default settings
+    from app.models import AppSettings
+    with Session(engine) as session:
+        if not session.get(AppSettings, 1):
+            settings = AppSettings(id=1)
+            session.add(settings)
+            session.commit()
 
 def get_session():
     """Dependency for getting a database session.

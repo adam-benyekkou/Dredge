@@ -1,0 +1,52 @@
+{% if registries %}
+    <table class="registry-table">
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Type</th>
+                <th>Endpoint</th>
+                <th>Status</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for reg in registries %}
+                <tr id="registry-{{ reg.id }}">
+                    <td><strong>{{ reg.name }}</strong></td>
+                    <td><span class="badge">{{ reg.type }}</span></td>
+                    <td><code>{{ reg.endpoint or "Default" }}</code></td>
+                    <td>
+                        {% if reg.is_active %}
+                            <span style="color: #2ECC71;">● Active</span>
+                        {% else %}
+                            <span style="color: var(--text-muted);">○ Inactive</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div style="display: flex; gap: 0.5rem;">
+                            <button class="outline contrast small" style="padding: 0.2rem 0.5rem;">Edit</button>
+                            <button 
+                                class="outline danger small" 
+                                style="padding: 0.2rem 0.5rem;"
+                                hx-delete="/registries/{{ reg.id }}"
+                                hx-confirm="Remove this registry configuration?"
+                                hx-target="#registry-{{ reg.id }}"
+                                hx-swap="outerHTML"
+                            >Remove</button>
+                        </div>
+                    </td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+{% else %}
+    <div style="text-align: center; padding: 3rem 1rem;">
+        <i data-lucide="database" style="width: 48px; height: 48px; color: var(--text-muted); margin-bottom: 1rem;"></i>
+        <p style="color: var(--text-muted);">No remote registries configured yet.</p>
+        <button class="outline" onclick="document.getElementById('add-registry-modal').showModal()">Configure First Registry</button>
+    </div>
+{% endif %}
+
+<script>
+    lucide.createIcons();
+</script>

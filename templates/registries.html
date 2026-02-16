@@ -1,0 +1,94 @@
+{% extends "layout.html" %}
+
+{% block title %}Dredge - Registries{% endblock %}
+
+{% block page_title %}
+    <h1>Registry Management</h1>
+{% endblock %}
+
+{% block top_actions %}
+    <button class="primary" onclick="document.getElementById('add-registry-modal').showModal()">
+        <i data-lucide="plus" style="width: 16px; height: 16px; vertical-align: middle; margin-right: 0.25rem;"></i>
+        Add Registry
+    </button>
+{% endblock %}
+
+{% block content %}
+<div class="registries-container">
+    <div class="card">
+        <header>
+            <h3 style="margin-bottom: 0;">Remote Registries</h3>
+            <p style="color: var(--text-muted); font-size: 0.9rem;">Configure access to external Docker registries like Docker Hub, ECR, or ACR.</p>
+        </header>
+
+        <div id="registries-list">
+            {% include "partials/registries_list.html" %}
+        </div>
+    </div>
+</div>
+
+<!-- Add Registry Modal -->
+<dialog id="add-registry-modal">
+    <article style="width: 500px;">
+        <header>
+            <a href="#close" aria-label="Close" class="close" onclick="document.getElementById('add-registry-modal').close()"></a>
+            <h3>Add New Registry</h3>
+        </header>
+        <form hx-post="/registries" hx-target="#registries-list" hx-swap="innerHTML" onsubmit="document.getElementById('add-registry-modal').close()">
+            <label for="name">Friendly Name
+                <input type="text" id="name" name="name" placeholder="e.g. My Docker Hub" required>
+            </label>
+
+            <label for="type">Registry Provider
+                <select id="type" name="type" required>
+                    <option value="DOCKERHUB">Docker Hub</option>
+                    <option value="GHCR">GitHub Container Registry</option>
+                    <option value="ECR">Amazon ECR</option>
+                    <option value="ACR">Azure Container Registry</option>
+                    <option value="GCR">Google Container Registry</option>
+                    <option value="GAR">Google Artifact Registry</option>
+                    <option value="CUSTOM">Custom Registry</option>
+                </select>
+            </label>
+
+            <label for="endpoint">Endpoint (Optional)
+                <input type="text" id="endpoint" name="endpoint" placeholder="e.g. index.docker.io/v1/">
+                <small>Leave empty for default provider endpoints.</small>
+            </label>
+
+            <div class="grid">
+                <label for="username">Username
+                    <input type="text" id="username" name="username" placeholder="Username / Access Key">
+                </label>
+                <label for="password">Password / Token
+                    <input type="password" id="password" name="password" placeholder="••••••••">
+                </label>
+            </div>
+
+            <footer style="display: flex; justify-content: flex-end; gap: 1rem; margin-top: 2rem;">
+                <button type="button" class="secondary outline" onclick="document.getElementById('add-registry-modal').close()">Cancel</button>
+                <button type="submit">Save Registry</button>
+            </footer>
+        </form>
+    </article>
+</dialog>
+
+<style>
+    .registry-table th {
+        font-size: 0.85rem;
+        text-transform: uppercase;
+        color: var(--text-muted);
+    }
+    .badge {
+        background-color: rgba(72, 202, 228, 0.1);
+        color: var(--accent);
+        padding: 0.2rem 0.5rem;
+        border-radius: 4px;
+        font-size: 0.8rem;
+        font-weight: 600;
+    }
+    button.small {
+        font-size: 0.8rem;
+    }
+</style>
+{% endblock %}

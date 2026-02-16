@@ -17,9 +17,11 @@ async def test_volumes_page_renders():
             name="test-vol-123",
             driver="local",
             size_bytes=1048576,
-            status=VolumeStatus.DANGLING
+            status=VolumeStatus.DANGLING,
+            source="Local"
         )
-        with patch("app.web.routes.LocalDockerClient.list_volumes", return_value=[real_vol]):
+        with patch("app.web.routes.RegistryClientFactory.get_client") as mock_get_client:
+            mock_get_client.return_value.list_volumes.return_value = [real_vol]
             response = await client.get("/volumes")
             assert response.status_code == 200
             assert b"Volumes" in response.content
@@ -31,8 +33,9 @@ async def test_delete_volume_endpoint():
     """Test volume deletion endpoint"""
     vol_name = "test-vol-to-delete"
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        with patch("app.web.routes.LocalDockerClient.delete_volume") as mock_delete:
-            mock_delete.return_value = {
+        with patch("app.web.routes.RegistryClientFactory.get_client") as mock_get_client:
+            mock_client = mock_get_client.return_value
+            mock_client.delete_volume.return_value = {
                 "success": True,
                 "name": vol_name,
                 "bytes_freed": 1024,
@@ -42,4 +45,4 @@ async def test_delete_volume_endpoint():
             response = await client.delete(f"/volumes/{vol_name}")
             assert response.status_code == 200
             assert response.content == b""
-            mock_delete.assert_called_once()
+            mock_client.delete_volume.assert_called_once()

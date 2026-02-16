@@ -1,40 +1,38 @@
 """FinOps cost calculation engine"""
 
 
+from app.core.db import engine
+from app.models import AppSettings
+from sqlmodel import Session
+
 class CostCalculator:
     """Calculate storage costs for Docker images"""
-    
-    # Pricing constants (USD per GB per month)
-    AWS_PRICE_PER_GB = 0.10
-    AZURE_PRICE_PER_GB = 0.13
-    GCP_PRICE_PER_GB = 0.10
     
     @classmethod
     def calculate_monthly_cost(
         cls,
         size_bytes: int,
-        provider: str = "AWS"
+        provider: str = None
     ) -> float:
         """
         Calculate monthly storage cost for a given size.
         
         Args:
             size_bytes: Size in bytes
-            provider: Cloud provider ("AWS", "AZURE", "GCP")
+            provider: Cloud provider (optional override)
             
         Returns:
-            Monthly cost in USD
+            Monthly cost in configured currency
         """
         # Convert bytes to GB
         size_gb = size_bytes / (1024 ** 3)
         
-        # Get price per GB based on provider
-        price_map = {
-            "AWS": cls.AWS_PRICE_PER_GB,
-            "AZURE": cls.AZURE_PRICE_PER_GB,
-            "GCP": cls.GCP_PRICE_PER_GB,
-        }
-        
-        price_per_gb = price_map.get(provider.upper(), cls.AWS_PRICE_PER_GB)
+        # Fetch settings from DB
+        with Session(engine) as session:
+            settings = session.get(AppSettings, 1)
+            if not settings:
+                price_per_gb = 0.10
+            else:
+                price_per_gb = settings.custom_price_per_gb
         
         return size_gb * price_per_gb

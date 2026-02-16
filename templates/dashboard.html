@@ -76,21 +76,41 @@
 
 {% block content %}
 <div class="kpi-row">
-    <div class="kpi-card">
-        <div class="kpi-label">Monthly Waste</div>
-        <div class="kpi-value danger">${{ monthly_waste|default(0)|round(2) }}</div>
-    </div>
-    
-    <div class="kpi-card">
-        <div class="kpi-label">Reclaimable Space</div>
-        <div class="kpi-value accent">{{ reclaimable_gb|default(0)|round(2) }} GB</div>
-    </div>
-    
-    <div class="kpi-card">
-        <div class="kpi-label">Efficiency Score</div>
-        <div class="kpi-value">{{ efficiency|default(0)|round(1) }}%</div>
-    </div>
+        <div class="kpi-card">
+            <div class="kpi-label">Monthly Waste</div>
+            <div class="kpi-value danger">{{ settings.currency_symbol }}{{ monthly_waste|default(0)|round(2) }}</div>
+        </div>
+        
+        <div class="kpi-card">
+            <div class="kpi-label">Reclaimable Space</div>
+            <div class="kpi-value accent">{{ reclaimable_gb|default(0)|round(2) }} GB</div>
+        </div>
+        
+        <div class="kpi-card">
+            <div class="kpi-label">Efficiency Score</div>
+            <div class="kpi-value">{{ efficiency|default(0)|round(1) }}%</div>
+        </div>
 </div>
+
+{% if registry_count == 0 %}
+<div style="background-color: rgba(217, 125, 84, 0.1); border: 1px solid var(--danger); border-radius: 8px; padding: 1rem; display: flex; align-items: center; gap: 1rem; margin-bottom: 2rem;">
+    <i data-lucide="alert-triangle" style="color: var(--danger);"></i>
+    <div style="flex: 1;">
+        <strong style="color: var(--pico-color);">No Remote Registries Configured</strong>
+        <p style="margin: 0; font-size: 0.85rem; color: var(--text-muted);">Configure external registries (Docker Hub, ECR, etc.) to scan for remote image costs.</p>
+    </div>
+    <a href="/registries" class="button secondary small" style="margin: 0; font-size: 0.8rem; padding: 0.4rem 1rem;">Setup Now</a>
+</div>
+{% else %}
+<div style="background-color: rgba(72, 202, 228, 0.05); border: 1px solid rgba(119, 141, 169, 0.2); border-radius: 8px; padding: 1rem; display: flex; align-items: center; gap: 1rem; margin-bottom: 2rem;">
+    <i data-lucide="database" style="color: var(--accent);"></i>
+    <div style="flex: 1;">
+        <strong style="color: var(--pico-color);">{{ registry_count }} Remote Registries Active</strong>
+        <p style="margin: 0; font-size: 0.85rem; color: var(--text-muted);">Connected to external providers. Remote scans are enabled.</p>
+    </div>
+    <a href="/registries" style="font-size: 0.85rem; color: var(--accent);">Manage Registries →</a>
+</div>
+{% endif %}
 
 <div id="scan-results">
     <div id="spinner" class="htmx-indicator" style="text-align: center; padding: 2rem;">

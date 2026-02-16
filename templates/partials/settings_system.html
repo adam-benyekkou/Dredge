@@ -1,0 +1,26 @@
+<div class="card" style="border-color: var(--danger);">
+    <header>
+        <h3 style="margin-bottom: 0; color: var(--danger);">Danger Zone</h3>
+        <p style="color: var(--text-muted); font-size: 0.9rem;">Destructive actions.</p>
+    </header>
+
+    <div style="display: flex; flex-direction: column; gap: 1rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div>
+                <strong>Flush Audit Logs</strong>
+                <p style="margin: 0; font-size: 0.8rem; color: var(--text-muted);">Permanently delete all deletion history.</p>
+            </div>
+            <button class="outline danger small" style="width: auto;">Flush Logs</button>
+        </div>
+
+        <hr style="margin: 0.5rem 0;">
+
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div>
+                <strong>Reset Database</strong>
+                <p style="margin: 0; font-size: 0.8rem; color: var(--text-muted);">Wipe all registries, policies, and settings.</p>
+            </div>
+            <button class="danger" style="width: auto;" hx-post="/settings/reset" hx-confirm="Are you absolutely sure? This cannot be undone.">Reset All</button>
+        </div>
+    </div>
+</div>
