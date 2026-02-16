@@ -11,7 +11,7 @@ A powerful, nautical-themed platform for managing Docker infrastructure costs an
 [![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)
 
-[📖 Documentation](https://adam-benyekkou.github.io/Dredge/) • [Quick Start](#quick-start) • [💻 GitHub](https://github.com/adam-benyekkou/Dredge)
+[📖 Documentation](https://adam-benyekkou.github.io/Dredge/) • [Quick Start](#quick-start)
 
 </div>
 
@@ -60,6 +60,66 @@ For comprehensive guides, API reference, and deployment instructions, visit:
 - Core Concepts (Images, Volumes, Policies, FinOps)
 - Production Deployment Guide
 - API Reference
+
+## Architecture
+
+### System Overview
+
+```mermaid
+graph TB
+    subgraph "Client Browser"
+        UI[Deep Harbor UI<br/>Jinja2 + HTMX]
+    end
+    
+    subgraph "Dredge Container"
+        API[FastAPI<br/>Web Server]
+        Registry[Registry Client<br/>Docker SDK]
+        FinOps[FinOps Engine<br/>Cost Calculator]
+        Models[(SQLModel<br/>ImageArtifact)]
+    end
+    
+    subgraph "Host System"
+        Docker[Docker Daemon<br/>/var/run/docker.sock]
+        Images[Docker Images<br/>Local Storage]
+    end
+    
+    UI -->|HTTP/HTMX| API
+    API -->|Query Images| Registry
+    API -->|Calculate Costs| FinOps
+    Registry -->|Unix Socket| Docker
+    Docker -->|List/Inspect| Images
+    API -->|Store Metadata| Models
+```
+
+### Data Flow
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Dashboard
+    participant API
+    participant DockerClient
+    participant FinOps
+    participant Docker
+    
+    User->>Dashboard: Click "Scan Now"
+    Dashboard->>API: POST /scan
+    API->>DockerClient: list_images()
+    DockerClient->>Docker: GET /images/json
+    Docker-->>DockerClient: [Image Data]
+    DockerClient-->>API: [ImageArtifact[]]
+    
+    loop For each image
+        API->>FinOps: calculate_monthly_cost(size, provider)
+        FinOps-->>API: cost_usd
+    end
+    
+    API->>API: Generate HTML Table
+    API-->>Dashboard: HTMX Response (HTML)
+    Dashboard->>User: Display Results
+```
+
+---
 
 ## 📄 License
 
