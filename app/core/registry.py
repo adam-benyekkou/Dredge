@@ -534,10 +534,15 @@ class DockerRegistryClient(BaseRegistryClient):
                 gh_session = requests.Session()
                 if self.username and self.password:
                     gh_session.auth = (self.username, self.password)
-                resp = gh_session.get("https://api.github.com/user", timeout=10)
+                
+                # Check /user/packages instead of /user to verify read:packages scope
+                resp = gh_session.get("https://api.github.com/user/packages", params={"package_type": "container", "per_page": 1}, timeout=10)
+                
                 if resp.status_code == 200:
-                    user = resp.json().get("login")
-                    return {"success": True, "message": f"Successfully connected to GitHub API as {user}"}
+                    # Get user info from packages listing if possible, or just confirm access
+                    return {"success": True, "message": f"Successfully authenticated with GitHub Packages (read:packages)"}
+                elif resp.status_code == 401:
+                    return {"success": False, "message": "Authentication failed: Invalid token or missing 'read:packages' scope"}
                 else:
                     return {"success": False, "message": f"GitHub API connection failed: {resp.status_code} {resp.reason}"}
 
@@ -875,11 +880,81 @@ class DockerRegistryClient(BaseRegistryClient):
             elif self.config.type == RegistryType.GHCR:
                  # GHCR Deletion (Delete Package Version)
                  # https://docs.github.com/en/rest/packages/packages?apiVersion=2022-11-28#delete-a-package-version-for-the-authenticated-user
-                 # DELETE /user/packages/{package_type}/{package_name}/versions/{package_version_id}
                  
-                 # NOTE: Tag deletion is complex in GHCR via API. You usually delete the version ID (digest).
-                 # We need to map tag -> version_id first.
-                 pass # Todo: proper GHCR deletion mapping
+                 # 1. We need the package version ID to delete.
+                 # image_id usually comes as "ghcr.io/owner/package:tag"
+                 # We need to map tag -> version ID
+                 
+                 if not self.username or not self.password:
+                     raise ValueError("Credentials required for deletion")
+                     
+                 gh_session = requests.Session()
+                 gh_session.auth = (self.username, self.password)
+                 gh_session.headers.update({
+                    "Accept": "application/vnd.github+json",
+                    "X-GitHub-Api-Version": "2022-11-28"
+                 })
+                 
+                 # Parse Owner/Package/Tag
+                 # Example: ghcr.io/adam-benyekkou/dredge:latest
+                 # image_id might be the full string from listing
+                 
+                 clean_id = image_id.replace("ghcr.io/", "")
+                 parts = clean_id.split(":")
+                 if len(parts) != 2:
+                     return {"success": False, "message": f"Invalid GHCR ID format: {image_id}"}
+                 
+                 full_repo = parts[0] # owner/package
+                 tag = parts[1]
+                 
+                 repo_parts = full_repo.split("/")
+                 if len(repo_parts) != 2:
+                     return {"success": False, "message": f"Invalid repo format: {full_repo}"}
+                     
+                 owner = repo_parts[0]
+                 package_name = repo_parts[1]
+                 
+                 # Step A: Find Version ID by Tag
+                 # GET /user/packages/container/{package_name}/versions
+                 # We filter manually since API filtering by tag isn't direct
+                 
+                 version_id = None
+                 find_url = f"https://api.github.com/user/packages/container/{package_name}/versions"
+                 
+                 # Pagination search for the tag
+                 found = False
+                 while find_url and not found:
+                     resp = gh_session.get(find_url, params={"per_page": 100})
+                     if resp.status_code != 200:
+                         logger.error(f"Failed to list versions for {package_name}: {resp.status_code}")
+                         break
+                         
+                     versions = resp.json()
+                     for v in versions:
+                         tags = v.get("metadata", {}).get("container", {}).get("tags", [])
+                         if tag in tags:
+                             version_id = v.get("id")
+                             found = True
+                             break
+                     
+                     if "next" in resp.links:
+                         find_url = resp.links["next"]["url"]
+                     else:
+                         find_url = None
+                 
+                 if not version_id:
+                     return {"success": False, "message": f"Could not find version ID for tag: {tag}"}
+                     
+                 # Step B: Delete Package Version
+                 # DELETE /user/packages/{package_type}/{package_name}/versions/{package_version_id}
+                 del_url = f"https://api.github.com/user/packages/container/{package_name}/versions/{version_id}"
+                 del_resp = gh_session.delete(del_url)
+                 
+                 if del_resp.status_code == 204:
+                     success = True
+                     message = f"Successfully deleted {image_id} (Version {version_id}) from GHCR"
+                 else:
+                     message = f"Failed to delete version {version_id}: {del_resp.status_code} {del_resp.text}"
 
             else:
                 # Generic V2 Deletion (Manifest Deletion)
