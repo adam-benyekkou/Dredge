@@ -37,10 +37,11 @@ Dredge can scan images stored in GitHub Packages (GHCR).
 | :--- | :---: | :--- |
 | **Scan Images** | ✅ | Lists containers from your personal account (`ghcr.io/username/...`). |
 | **Cost Estimation** | ⚠️ | Limited. GitHub API often returns 0 for package size. |
-| **Delete Images** | 🚧 | **In Progress**. Currently scan-only. |
+| **Delete Images** | ✅ | **Permanently deletes** package versions from GHCR. Requires Delete PAT scope. |
 
 ## Troubleshooting
 
 - **"Manifest Unknown"**: Ensure your PAT has access to the specific organization or repository packages.
 - **SSO**: If your organization enforces SAML SSO, you must authorize the PAT for that organization.
+- **"Authentication failed: read:packages scope"**: Ensure you used a **Classic PAT** with the correct checkboxes selected.
 - **Empty List**: Currently, Dredge scans packages owned by the *authenticated user*. If your packages are in an Organization, you might not see them yet (feature coming soon).
