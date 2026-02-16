@@ -134,34 +134,6 @@ sequenceDiagram
     Dashboard->>User: Display Results
 ```
 
-### Component Architecture
-
-```mermaid
-graph LR
-    subgraph "app/"
-        subgraph "core/"
-            Registry[registry.py<br/>BaseRegistryClient<br/>LocalDockerClient]
-            FinOps[finops.py<br/>CostCalculator]
-        end
-        
-        subgraph "models/"
-            Models[models.py<br/>ImageArtifact]
-        end
-        
-        subgraph "web/"
-            Routes[routes.py<br/>API Endpoints]
-        end
-        
-        Main[main.py<br/>FastAPI App]
-    end
-    
-    Main --> Routes
-    Routes --> Registry
-    Routes --> FinOps
-    Routes --> Models
-    Registry --> Models
-```
-
 ---
 
 ## 🛠️ Tech Stack
