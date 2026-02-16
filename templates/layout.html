@@ -120,11 +120,11 @@
         </div>
         
         <nav class="nav">
-            <a href="/" class="active">Dashboard</a>
-            <a href="/images">Images</a>
-            <a href="/volumes">Volumes</a>
-            <a href="/policies">Policies</a>
-            <a href="/logs">Logs</a>
+            <a href="/" {% if request.url.path == "/" %}class="active"{% endif %}>Dashboard</a>
+            <a href="/images" {% if request.url.path == "/images" %}class="active"{% endif %}>Images</a>
+            <a href="/volumes" {% if request.url.path == "/volumes" %}class="active"{% endif %}>Volumes</a>
+            <a href="/policies" {% if request.url.path == "/policies" %}class="active"{% endif %}>Policies</a>
+            <a href="/logs" {% if request.url.path == "/logs" %}class="active"{% endif %}>Logs</a>
         </nav>
         
         <div class="sidebar-footer">

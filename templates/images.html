@@ -42,25 +42,35 @@
         font-weight: 600;
     }
     
-    .badge.safe {
+    .badge.active {
         background-color: var(--accent);
         color: var(--pico-background-color);
     }
     
-    .badge.dangling {
+    .badge.quarantined {
         background-color: var(--danger);
         color: #fff;
     }
     
-    .badge.quarantined {
-        background: repeating-linear-gradient(
-            45deg,
-            var(--text-muted),
-            var(--text-muted) 10px,
-            #2a2a2a 10px,
-            #2a2a2a 20px
-        );
+    .badge.deleted {
+        background-color: var(--text-muted);
         color: #fff;
+    }
+    
+    .action-btn {
+        padding: 0.25rem 0.75rem;
+        font-size: 0.875rem;
+        margin: 0 0.25rem;
+        cursor: pointer;
+    }
+    
+    .action-btn.danger {
+        background-color: var(--danger);
+        border-color: var(--danger);
+    }
+    
+    .action-btn.danger:hover {
+        background-color: #c26a42;
     }
 </style>
 {% endblock %}
@@ -78,23 +88,41 @@
                 <th>Size</th>
                 <th>Created</th>
                 <th>Status</th>
+                <th>Monthly Cost</th>
+                <th>Actions</th>
             </tr>
         </thead>
         <tbody>
             {% if images %}
                 {% for image in images %}
-                <tr>
+                <tr id="image-{{ image.digest.replace(':', '-') }}">
                     <td><input type="checkbox" name="image-select" value="{{ image.digest }}"></td>
                     <td>{{ image.tags[0].split(':')[0] if image.tags else 'N/A' }}</td>
                     <td>{{ image.tags[0].split(':')[1] if ':' in (image.tags[0] if image.tags else '') else 'latest' }}</td>
                     <td>{{ (image.size_bytes / 1024**3)|round(2) }} GB</td>
                     <td>{{ image.created_at.strftime('%Y-%m-%d %H:%M') if image.created_at else 'N/A' }}</td>
-                    <td><span class="badge safe">Safe</span></td>
+                    <td>
+                        <span class="badge {{ image.status.lower() }}">
+                            {{ image.status }}
+                        </span>
+                    </td>
+                    <td>${{ (image.size_bytes / 1024**3 * 0.10)|round(2) }}/mo</td>
+                    <td>
+                        <button 
+                            class="action-btn danger" 
+                            hx-delete="/images/{{ image.digest }}"
+                            hx-confirm="Are you sure you want to purge this image?"
+                            hx-target="#image-{{ image.digest.replace(':', '-') }}"
+                            hx-swap="outerHTML"
+                        >
+                            Purge
+                        </button>
+                    </td>
                 </tr>
                 {% endfor %}
             {% else %}
                 <tr>
-                    <td colspan="6" style="text-align: center; color: var(--text-muted);">
+                    <td colspan="8" style="text-align: center; color: var(--text-muted);">
                         No images found. Click "Scan Now" from the dashboard.
                     </td>
                 </tr>

@@ -1,0 +1,49 @@
+{% extends "layout.html" %}
+
+{% block title %}Logs - Dredge{% endblock %}
+
+{% block content %}
+<h1>Audit Logs</h1>
+
+<div class="card">
+    <header>Deletion History</header>
+    <p>Detailed history of all image removal operations and cost savings.</p>
+    
+    <table role="grid">
+        <thead>
+            <tr>
+                <th>Timestamp</th>
+                <th>Image Tags</th>
+                <th>Bytes Freed</th>
+                <th>Savings (USD)</th>
+                <th>Mode</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% if logs %}
+                {% for log in logs %}
+                <tr>
+                    <td>{{ log.timestamp.strftime('%Y-%m-%d %H:%M') }}</td>
+                    <td>{{ log.image_tags | join(', ') }}</td>
+                    <td>{{ (log.bytes_freed / 1024**3)|round(2) }} GB</td>
+                    <td>${{ log.savings_usd|round(2) }}</td>
+                    <td>
+                        {% if log.dry_run %}
+                            <span class="badge active">DRY RUN</span>
+                        {% else %}
+                            <span class="badge quarantined">PURGE</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            {% else %}
+                <tr>
+                    <td colspan="5" style="text-align: center; color: var(--text-muted);">
+                        No audit logs found. Start purging images to see history.
+                    </td>
+                </tr>
+            {% endif %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

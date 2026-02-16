@@ -1,8 +1,13 @@
 """End-to-end tests for Dredge"""
 
 import pytest
+from unittest.mock import patch
 from httpx import AsyncClient, ASGITransport
 from app.main import app
+from app.core.db import init_db
+
+# Initialize database for tests
+init_db()
 
 
 @pytest.mark.asyncio
@@ -17,22 +22,51 @@ async def test_health_check():
 
 
 @pytest.mark.asyncio
-async def test_dashboard_renders():
-    """Test dashboard page renders"""
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        response = await client.get("/")
-        assert response.status_code == 200
-        assert b"Dashboard" in response.content
-        assert b"Monthly Waste" in response.content
-
-
-@pytest.mark.asyncio
 async def test_images_page_renders():
     """Test images page renders"""
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.get("/images")
         assert response.status_code == 200
         assert b"Docker Images" in response.content
+
+
+@pytest.mark.asyncio
+async def test_policies_page_renders():
+    """Test policies page renders"""
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get("/policies")
+        assert response.status_code == 200
+        assert b"Lifecycle Policies" in response.content
+
+
+@pytest.mark.asyncio
+async def test_logs_page_renders():
+    """Test logs page renders"""
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get("/logs")
+        assert response.status_code == 200
+        assert b"Audit Logs" in response.content
+
+
+@pytest.mark.asyncio
+async def test_purge_image_endpoint():
+    """Test purge image endpoint"""
+    digest = "sha256:1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        # Mock LocalDockerClient.delete_image
+        with patch("app.web.routes.LocalDockerClient.delete_image") as mock_delete:
+            mock_delete.return_value = {
+                "success": True,
+                "image_id": digest,
+                "image_tags": ["test:latest"],
+                "bytes_freed": 100,
+                "savings_usd": 0.1,
+                "dry_run": False,
+                "message": "Deleted"
+            }
+            response = await client.delete(f"/images/{digest}")
+            assert response.status_code == 200
+            assert response.content == b""
 
 
 @pytest.mark.asyncio

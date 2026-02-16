@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from app.web.routes import router
+from app.core.db import init_db
 
 # Configure logging
 logging.basicConfig(
@@ -36,6 +37,8 @@ async def health_check():
 async def startup_event():
     """Application startup tasks"""
     logging.info("Dredge application starting...")
+    init_db()
+    logging.info("Database initialized.")
 
 
 @app.on_event("shutdown")

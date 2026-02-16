@@ -1,0 +1,46 @@
+{% extends "layout.html" %}
+
+{% block title %}Policies - Dredge{% endblock %}
+
+{% block content %}
+<h1>Lifecycle Policies</h1>
+
+<div class="card">
+    <header>Automated Cleanup Rules</header>
+    <p>Define rules to automatically quarantine and remove unused Docker images.</p>
+    
+    <table role="grid">
+        <thead>
+            <tr>
+                <th>Policy Name</th>
+                <th>Keep Count</th>
+                <th>Max Age</th>
+                <th>Whitelist</th>
+                <th>Enabled</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>Default Cleanup</td>
+                <td>3</td>
+                <td>30 days</td>
+                <td><code>^prod-.*</code></td>
+                <td><span class="badge active">Yes</span></td>
+                <td>
+                    <button class="action-btn" disabled>Edit</button>
+                </td>
+            </tr>
+        </tbody>
+    </table>
+    
+    <footer>
+        <button disabled>Add New Policy</button>
+    </footer>
+</div>
+
+<article>
+    <h3>Phase 2.5 Preview</h3>
+    <p>Automated policy execution engine will be implemented in the next sub-phase.</p>
+</article>
+{% endblock %}

@@ -102,7 +102,8 @@ def get_expired_images(session: Session) -> list[ImageArtifact]:
     statement = (
         select(ImageArtifact)
         .where(ImageArtifact.status == ImageStatus.QUARANTINED)
-        .where(ImageArtifact.expires_at <= now)
+        .where(ImageArtifact.expires_at != None)  # noqa: E711
+        .where(ImageArtifact.expires_at <= now)  # type: ignore[operator]
     )
     
     images = session.exec(statement).all()

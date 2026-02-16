@@ -1,13 +1,16 @@
 """API routes for Dredge"""
 
 from html import escape
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, Depends, HTTPException
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 import logging
+from sqlmodel import Session, select, col
 
 from app.core.registry import LocalDockerClient
 from app.core.finops import CostCalculator
+from app.core.db import get_session
+from app.models import ImageStatus, AuditLog
 
 router = APIRouter()
 templates = Jinja2Templates(directory="templates")
@@ -29,19 +32,53 @@ async def dashboard(request: Request):
 
 
 @router.get("/images", response_class=HTMLResponse)
-async def images_view(request: Request):
+async def images_view(request: Request, session: Session = Depends(get_session)):
     """Render the images view"""
+    try:
+        client = LocalDockerClient()
+        images = client.list_images()
+    except Exception as e:
+        logger.error(f"Failed to fetch images for view: {str(e)}")
+        images = []
+        
     return templates.TemplateResponse(
         "images.html",
         {
             "request": request,
-            "images": [],
+            "images": images,
+        }
+    )
+
+
+@router.get("/policies", response_class=HTMLResponse)
+async def policies_view(request: Request, session: Session = Depends(get_session)):
+    """Render the policies view"""
+    return templates.TemplateResponse(
+        "policies.html",
+        {
+            "request": request,
+        }
+    )
+
+
+@router.get("/logs", response_class=HTMLResponse)
+async def logs_view(request: Request, session: Session = Depends(get_session)):
+    """Render the logs view"""
+    # Fetch latest 50 logs
+    statement = select(AuditLog).order_by(col(AuditLog.timestamp).desc()).limit(50)
+    logs = session.exec(statement).all()
+    
+    return templates.TemplateResponse(
+        "logs.html",
+        {
+            "request": request,
+            "logs": logs,
         }
     )
 
 
 @router.post("/scan", response_class=HTMLResponse)
-async def scan_images(request: Request):
+async def scan_images(request: Request, session: Session = Depends(get_session)):
     """Scan Docker images and return HTML table rows"""
     try:
         # Initialize Docker client
@@ -65,15 +102,33 @@ async def scan_images(request: Request):
             cost = CostCalculator.calculate_monthly_cost(img.size_bytes)
             created = escape(img.created_at.strftime('%Y-%m-%d %H:%M') if img.created_at else 'N/A')
             
+            # Status badge logic
+            status = ImageStatus.ACTIVE  # Default for scan for now
+            status_class = status.lower()
+            
+            # ID for the row (must be safe for CSS selectors)
+            row_id = f"image-{digest_escaped.replace(':', '-')}"
+            
             html_rows.append(f"""
-                <tr>
+                <tr id="{row_id}">
                     <td><input type="checkbox" name="image-select" value="{digest_escaped}"></td>
                     <td>{repo}</td>
                     <td>{tag}</td>
                     <td>{size_gb:.2f} GB</td>
                     <td>{created}</td>
-                    <td><span class="badge safe">Safe</span></td>
+                    <td><span class="badge {status_class}">{status}</span></td>
                     <td>${cost:.2f}/mo</td>
+                    <td>
+                        <button 
+                            class="action-btn danger" 
+                            hx-delete="/images/{digest_escaped}"
+                            hx-confirm="Are you sure you want to purge this image?"
+                            hx-target="#{row_id}"
+                            hx-swap="outerHTML"
+                        >
+                            Purge
+                        </button>
+                    </td>
                 </tr>
             """)
         
@@ -89,6 +144,7 @@ async def scan_images(request: Request):
                             <th>Created</th>
                             <th>Status</th>
                             <th>Monthly Cost</th>
+                            <th>Actions</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -108,5 +164,38 @@ async def scan_images(request: Request):
         logger.error(f"Scan failed: {str(e)}", exc_info=True)
         return HTMLResponse(
             content='<p style="color: var(--danger);">Scan failed. Please check Docker daemon connection.</p>',
+            status_code=500
+        )
+
+
+@router.delete("/images/{digest}", response_class=HTMLResponse)
+async def purge_image(digest: str, session: Session = Depends(get_session)):
+    """Purge (permanently delete) a Docker image"""
+    try:
+        # SECURITY FIX: The registry client already validates digest format
+        client = LocalDockerClient()
+        
+        # Perform real deletion (dry_run=False)
+        result = client.delete_image(session, digest, dry_run=False)
+        
+        if result["success"]:
+            session.commit()
+            # Return empty response or something indicating success for HTMX to swap
+            # Since target is the row itself, returning empty string removes the row
+            return HTMLResponse(content="")
+        else:
+            logger.warning(f"Purge failed for {digest}: {result['message']}")
+            # Could return a row with an error message instead of removing it
+            return HTMLResponse(
+                content=f'<tr class="error-row"><td colspan="8" style="color: var(--danger);">{result["message"]}</td></tr>',
+                status_code=200 # HTMX still swaps it
+            )
+            
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Purge failed: {str(e)}", exc_info=True)
+        return HTMLResponse(
+            content=f'<tr class="error-row"><td colspan="8" style="color: var(--danger);">Purge failed: {escape(str(e))}</td></tr>',
             status_code=500
         )

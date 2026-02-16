@@ -1,7 +1,7 @@
 """Docker Registry abstraction"""
 
 from abc import ABC, abstractmethod
-from typing import List, Optional
+from typing import List
 import docker
 from docker.errors import APIError, ImageNotFound
 from datetime import datetime
@@ -9,7 +9,7 @@ import re
 import logging
 
 from sqlmodel import Session
-from app.models import ImageArtifact, ImageStatus, AuditLog
+from app.models import ImageArtifact, AuditLog
 from app.core.finops import CostCalculator
 
 logger = logging.getLogger(__name__)
