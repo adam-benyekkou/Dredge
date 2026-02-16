@@ -3,6 +3,7 @@ import { defineConfig } from 'vitepress'
 export default defineConfig({
   title: "Dredge",
   description: "Docker FinOps & Lifecycle Management Tool",
+  base: "/Dredge/",
   ignoreDeadLinks: [
     // Ignore all localhost links
     /^https?:\/\/localhost/,
