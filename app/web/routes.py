@@ -75,34 +75,25 @@ async def dashboard(request: Request, session: Session = Depends(get_session)):
 
 @router.get("/images", response_class=HTMLResponse)
 async def images_view(request: Request, session: Session = Depends(get_session)):
-    """Render the images view with combined results from all registries"""
+    """Render the images view shell (Data loaded via HTMX)"""
     try:
-        source_filter = request.query_params.get("source")
         settings = session.get(AppSettings, 1)
         
-        # 1. Fetch Local Images
-        local_client = RegistryClientFactory.get_client()
-        images = local_client.list_images()
-        
-        # 2. Fetch Remote Images (Active Registries Only)
+        # Collect unique sources from CONFIG, not live data, for the filter dropdown
+        # This is fast and doesn't require network calls
+        all_sources = ["Local"]
         remote_configs = session.exec(select(RegistryConfig).where(RegistryConfig.is_active == True)).all()
-        for config in remote_configs:
-            try:
-                remote_client = RegistryClientFactory.get_client(config)
-                images.extend(remote_client.list_images())
-            except Exception as re:
-                logger.error(f"Failed to fetch images from registry {config.name}: {str(re)}")
-
-        # 3. Collect unique sources BEFORE filtering (Fix for disappearing sources)
-        all_sources = sorted(list(set([img.source for img in images] + ["Local"])))
-
-        # 4. Apply Filtering
-        if source_filter and source_filter != "All":
-            images = [img for img in images if img.source == source_filter]
+        for conf in remote_configs:
+            # Clean names for dropdown
+            name = conf.name or conf.type.value
+            if name not in all_sources:
+                all_sources.append(name)
+        
+        # We assume Docker Hub / GHCR are standard names if used in types, but let's stick to what list_images returns
+        # Actually, list_images returns config.name. So using config.name is correct.
         
     except Exception as e:
-        logger.error(f"Failed to fetch images for view: {str(e)}")
-        images = []
+        logger.error(f"Failed to init images view: {str(e)}")
         all_sources = ["Local"]
         settings = None
         
@@ -110,10 +101,11 @@ async def images_view(request: Request, session: Session = Depends(get_session))
         request,
         "images.html",
         {
-            "images": images,
+            "images": [], # Empty initially for lazy load
             "sources": all_sources,
-            "current_source": source_filter or "All",
+            "current_source": request.query_params.get("source", "All"),
             "settings": settings,
+            "lazy_load": True # Flag to trigger HTMX load
         }
     )
 

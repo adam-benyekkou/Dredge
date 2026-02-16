@@ -42,5 +42,14 @@
 {% block content %}
     <!-- Container that might be swapped via HTMX if targeting #image-table directly (e.g. from Batch Delete) -->
     <!-- However, we moved the table to a partial. The initial load includes it. -->
-    {% include "partials/images_table.html" %}
+    
+    {% if lazy_load %}
+        <div id="image-table" hx-post="/scan" hx-trigger="load" class="table-container">
+            <div style="text-align: center; padding: 4rem;">
+                <span aria-busy="true">Loading images...</span>
+            </div>
+        </div>
+    {% else %}
+        {% include "partials/images_table.html" %}
+    {% endif %}
 {% endblock %}
