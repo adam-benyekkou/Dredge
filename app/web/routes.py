@@ -638,6 +638,7 @@ async def scan_images(request: Request, response: Response, session: Session = D
         query_params = request.query_params
         limit = int(query_params.get("limit", 20))
         offset = int(query_params.get("offset", 0))
+        source_filter = query_params.get("source", "All")
         
         # Get settings for cost calc
         settings = session.get(AppSettings, 1)
@@ -659,18 +660,28 @@ async def scan_images(request: Request, response: Response, session: Session = D
         images = []
         
         # Local
-        local_client = RegistryClientFactory.get_client()
-        images.extend(local_client.list_images(limit=limit))
+        if source_filter == "All" or source_filter == "Local":
+            try:
+                local_client = RegistryClientFactory.get_client()
+                images.extend(local_client.list_images(limit=limit))
+            except Exception as e:
+                logger.error(f"Failed to fetch local images: {e}")
         
         # Remote
-        remote_configs = session.exec(select(RegistryConfig).where(RegistryConfig.is_active == True)).all()
-        for config in remote_configs:
-            try:
-                remote_client = RegistryClientFactory.get_client(config)
-                # Pass limit to remote client
-                images.extend(remote_client.list_images(limit=limit))
-            except Exception as re:
-                logger.error(f"Failed to fetch images from registry {config.name}: {str(re)}")
+        if source_filter != "Local":
+            remote_configs = session.exec(select(RegistryConfig).where(RegistryConfig.is_active == True)).all()
+            for config in remote_configs:
+                # Filter by source name if specific source selected
+                # Note: list_images returns config.name as source
+                if source_filter != "All" and config.name != source_filter:
+                    continue
+
+                try:
+                    remote_client = RegistryClientFactory.get_client(config)
+                    # Pass limit to remote client
+                    images.extend(remote_client.list_images(limit=limit))
+                except Exception as re:
+                    logger.error(f"Failed to fetch images from registry {config.name}: {str(re)}")
         
         # Sort combined results (newest first) to ensure "Load More" makes sense
         images.sort(key=lambda x: x.created_at or datetime.min, reverse=True)
@@ -703,14 +714,6 @@ async def scan_images(request: Request, response: Response, session: Session = D
         )
         
     except Exception as e:
-        logger.error(f"Scan failed: {str(e)}", exc_info=True)
-        return HTMLResponse(
-            content='<p style="color: var(--danger);">Scan failed. Please check Docker daemon connection.</p>',
-            status_code=500
-        )
-        
-    except Exception as e:
-        # SECURITY FIX: Log full error internally, return generic message
         logger.error(f"Scan failed: {str(e)}", exc_info=True)
         return HTMLResponse(
             content='<p style="color: var(--danger);">Scan failed. Please check Docker daemon connection.</p>',

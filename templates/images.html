@@ -28,7 +28,7 @@
         </form>
 
         <button 
-            hx-post="/scan" 
+            hx-post="/scan?source={{ current_source }}" 
             hx-target="#image-table" 
             class="outline"
             style="margin: 0; padding: 0.5rem 1rem; font-size: 0.9rem;"
@@ -44,7 +44,7 @@
     <!-- However, we moved the table to a partial. The initial load includes it. -->
     
     {% if lazy_load %}
-        <div id="image-table" hx-post="/scan" hx-trigger="load" class="table-container">
+        <div id="image-table" hx-post="/scan?source={{ current_source }}" hx-trigger="load" class="table-container">
             <div style="text-align: center; padding: 4rem;">
                 <span aria-busy="true">Loading images...</span>
             </div>
