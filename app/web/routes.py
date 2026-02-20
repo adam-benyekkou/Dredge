@@ -50,15 +50,24 @@ async def dashboard(request: Request, session: Session = Depends(get_session)):
         total_images = len(images)
         total_volumes = len(volumes)
         
-        # Simple cost logic
+        # Simple cost logic & bloat collection
+        bloated_images = []
         for img in images:
             monthly_waste += CostCalculator.calculate_monthly_cost(img.size_bytes, img.source)
             reclaimable_gb += img.size_bytes / (1024**3)
+            
+            if img.bloat_score < 80:
+                bloated_images.append(img)
+                
+        # Sort bloated images by score (worst first)
+        bloated_images.sort(key=lambda x: x.bloat_score)
+        bloated_images = bloated_images[:5]
             
         has_scanned = True
         
     except Exception as e:
         logger.error(f"Failed to fetch dashboard metrics: {e}")
+        bloated_images = []
         
     budget_percent = 0
     if settings and settings.monthly_budget > 0:
@@ -76,7 +85,8 @@ async def dashboard(request: Request, session: Session = Depends(get_session)):
             "total_images": total_images,
             "total_volumes": total_volumes,
             "has_scanned": has_scanned,
-            "budget_percent": budget_percent
+            "budget_percent": budget_percent,
+            "bloated_images": bloated_images
         }
     )
 

@@ -94,18 +94,37 @@
 </article>
 {% endif %}
 
-<article class="card" style="margin-bottom: 1.5rem;">
-    <header class="card-header">Cost Trend (Last 30 Days)</header>
-    <div class="card-body" style="height: 300px; position: relative;">
-        <canvas id="costChart"></canvas>
-        <div id="chart-placeholder" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; color: var(--text-muted); background: rgba(0,0,0,0.2); pointer-events: none;">
-            Waiting for daily snapshot data...
+<div class="grid mb-4" style="grid-template-columns: 2fr 1fr; gap: 1.5rem;">
+    <!-- Line Chart (History) -->
+    <article class="card">
+        <header class="card-header">Cost Trend (Last 30 Days)</header>
+        <div class="card-body" style="height: 300px; position: relative;">
+            <canvas id="costChart"></canvas>
+            <div id="chart-placeholder" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; color: var(--text-muted); background: rgba(0,0,0,0.2); pointer-events: none;">
+                Waiting for daily snapshot data...
+            </div>
         </div>
-    </div>
-</article>
+    </article>
+
+    <!-- Donut Chart (Composition) -->
+    <article class="card">
+        <header class="card-header">Storage Composition</header>
+        <div class="card-body" style="height: 300px; position: relative; display: flex; align-items: center; justify-content: center;">
+            {% if has_scanned %}
+                <canvas id="compositionChart"></canvas>
+            {% else %}
+                <div style="color: var(--text-muted); font-size: 0.9rem; text-align: center;">
+                    <i data-lucide="pie-chart" style="width: 32px; height: 32px; margin-bottom: 0.5rem; opacity: 0.5;"></i><br>
+                    Run scan to view breakdown
+                </div>
+            {% endif %}
+        </div>
+    </article>
+</div>
 
 <script>
     document.addEventListener('DOMContentLoaded', function() {
+        // Line Chart Logic
         fetch('/api/metrics/history')
             .then(response => response.json())
             .then(data => {
@@ -173,11 +192,48 @@
                 }
             })
             .catch(err => console.error("Failed to load metrics history:", err));
+
+        // Donut Chart Logic (Only if data exists)
+        {% if has_scanned and chart_data %}
+        const ctxDonut = document.getElementById('compositionChart').getContext('2d');
+        new Chart(ctxDonut, {
+            type: 'doughnut',
+            data: {
+                labels: ['Active Images', 'Volumes', 'Waste (Untagged/Dangling)'],
+                datasets: [{
+                    data: [
+                        {{ chart_data.images_gb }} - {{ chart_data.waste_gb }}, // Active Images
+                        {{ chart_data.volumes_gb }},
+                        {{ chart_data.waste_gb }}
+                    ],
+                    backgroundColor: [
+                        '#0077B6', // Primary Blue
+                        '#9b59b6', // Purple (Volumes)
+                        '#D97D54'  // Rust (Waste)
+                    ],
+                    borderWidth: 0,
+                    hoverOffset: 4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                cutout: '70%',
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: { color: '#a0a0a0', padding: 20, font: { size: 11 } }
+                    }
+                }
+            }
+        });
+        {% endif %}
     });
 </script>
 
 {% if registry_count == 0 %}
 <article class="card" id="registry-alert" style="border-color: var(--danger); background-color: rgba(217, 125, 84, 0.05); margin-top: 0; margin-bottom: 1.5rem;">
+    <!-- ... existing alert content ... -->
     <div class="card-body" style="display: flex; align-items: center; gap: 1rem; position: relative;">
         <i data-lucide="alert-triangle" style="color: var(--danger); width: 24px; height: 24px;"></i>
         <div style="flex: 1;">
@@ -185,35 +241,30 @@
             <p style="margin: 0; font-size: 0.9rem; color: var(--text-muted);">Configure external registries (Docker Hub, ECR, etc.) to scan for remote image costs.</p>
         </div>
         <a href="/registries" class="btn btn-ghost" style="text-decoration: none; font-size: 0.9rem; margin-right: 2rem;">Setup Now</a>
-        <button 
-            onclick="localStorage.setItem('registry-alert-dismissed', 'true'); document.getElementById('registry-alert').remove();" 
-            style="position: absolute; top: 0.75rem; right: 0.75rem; background: none; border: none; cursor: pointer; padding: 0.25rem; color: var(--text-muted); opacity: 0.6; transition: opacity 0.2s;"
-            onmouseover="this.style.opacity='1'"
-            onmouseout="this.style.opacity='0.6'"
-            title="Dismiss"
-        >
-            <i data-lucide="x" style="width: 20px; height: 20px;"></i>
-        </button>
+        <button onclick="localStorage.setItem('registry-alert-dismissed', 'true'); document.getElementById('registry-alert').remove();" style="position: absolute; top: 0.75rem; right: 0.75rem; background: none; border: none; cursor: pointer; padding: 0.25rem; color: var(--text-muted); opacity: 0.6;"><i data-lucide="x" style="width: 20px; height: 20px;"></i></button>
     </div>
 </article>
 {% else %}
-<article class="card" id="registry-alert" style="border-color: var(--primary); background-color: rgba(0, 119, 182, 0.05); margin-top: 0; margin-bottom: 1.5rem;">
-    <div class="card-body" style="display: flex; align-items: center; gap: 1rem; position: relative;">
-        <i data-lucide="database" style="color: var(--accent); width: 24px; height: 24px;"></i>
-        <div style="flex: 1;">
-            <strong style="color: var(--text-main); font-size: 1rem;">{{ registry_count }} Remote Registries Active</strong>
-            <p style="margin: 0; font-size: 0.9rem; color: var(--text-muted);">Connected to external providers. Remote scans are enabled.</p>
+<article class="card" style="margin-bottom: 1.5rem;">
+    <header class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+        <span>Active Registries</span>
+        <a href="/registries" style="font-size: 0.8rem; color: var(--accent); text-decoration: none;">Manage</a>
+    </header>
+    <div class="card-body" style="display: flex; gap: 1rem; flex-wrap: wrap;">
+        <!-- Local -->
+        <div style="display: flex; align-items: center; gap: 0.5rem; background: var(--bg-surface-hover); padding: 0.5rem 1rem; border-radius: 20px; border: 1px solid var(--border-subtle);">
+            <div style="width: 8px; height: 8px; border-radius: 50%; background: #2ECC71; box-shadow: 0 0 8px #2ECC71;"></div>
+            <span style="font-size: 0.9rem; font-weight: 500;">Local Docker</span>
         </div>
-        <a href="/registries" style="font-size: 0.9rem; color: var(--accent); text-decoration: none; margin-right: 2rem;">Manage Registries →</a>
-        <button 
-            onclick="localStorage.setItem('registry-alert-dismissed', 'true'); document.getElementById('registry-alert').remove();" 
-            style="position: absolute; top: 0.75rem; right: 0.75rem; background: none; border: none; cursor: pointer; padding: 0.25rem; color: var(--text-muted); opacity: 0.6; transition: opacity 0.2s;"
-            onmouseover="this.style.opacity='1'"
-            onmouseout="this.style.opacity='0.6'"
-            title="Dismiss"
-        >
-            <i data-lucide="x" style="width: 20px; height: 20px;"></i>
-        </button>
+        
+        <!-- Remote Registries -->
+        {% for reg in active_registries %}
+        <div style="display: flex; align-items: center; gap: 0.5rem; background: var(--bg-surface-hover); padding: 0.5rem 1rem; border-radius: 20px; border: 1px solid var(--border-subtle);">
+            <div style="width: 8px; height: 8px; border-radius: 50%; background: #2ECC71; box-shadow: 0 0 8px #2ECC71;"></div>
+            <span style="font-size: 0.9rem; font-weight: 500;">{{ reg.name }}</span>
+            <span style="font-size: 0.75rem; color: var(--text-muted);">({{ reg.type.value }})</span>
+        </div>
+        {% endfor %}
     </div>
 </article>
 {% endif %}

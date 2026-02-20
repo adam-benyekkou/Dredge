@@ -71,6 +71,17 @@ class ImageArtifact(SQLModel, table=True):
     expires_at: Optional[datetime] = Field(default=None)
     bloat_score: int = Field(default=100) # 0-100 (100 = Optimized)
     bloat_issues: Optional[str] = Field(default=None) # JSON list of issues
+    
+    @property
+    def issues_list(self):
+        """Parse bloat issues from JSON string"""
+        if self.bloat_issues:
+            try:
+                import json
+                return json.loads(self.bloat_issues)
+            except:
+                return [self.bloat_issues]
+        return []
 
 
 class VolumeArtifact(SQLModel, table=True):

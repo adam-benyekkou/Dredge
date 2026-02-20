@@ -15,6 +15,8 @@ from sqlmodel import Session
 from app.models import ImageArtifact, AuditLog, VolumeArtifact, VolumeStatus, RegistryConfig, RegistryType
 from app.core.finops import CostCalculator
 from app.core.security import decrypt_secret
+from app.core.bloat import BloatAnalyzer
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -155,15 +157,21 @@ class LocalDockerClient(BaseRegistryClient):
                 # Extract tags (remove 'latest' duplicates)
                 tags = img.tags if img.tags else [f"<none>:{img.short_id}"]
                 
+                # Bloat Analysis
+                size = img.attrs.get('Size', 0)
+                analysis = BloatAnalyzer.analyze_image(tags, size)
+                
                 # Create ImageArtifact
                 artifact = ImageArtifact(
                     tags=tags,
-                    size_bytes=img.attrs.get('Size', 0),
+                    size_bytes=size,
                     created_at=datetime.fromisoformat(
                         img.attrs.get('Created', datetime.utcnow().isoformat()).replace('Z', '+00:00')
                     ),
                     digest=img.id or "unknown",
-                    source="Local"
+                    source="Local",
+                    bloat_score=analysis['score'],
+                    bloat_issues=json.dumps(analysis['issues']) if analysis['issues'] else None
                 )
                 artifacts.append(artifact)
             
@@ -831,12 +839,15 @@ class DockerRegistryClient(BaseRegistryClient):
                         digest = ver.get("name", "") 
                         
                         for tag in tags:
+                            analysis = BloatAnalyzer.analyze_image([tag], size)
                             local_artifacts.append(ImageArtifact(
                                 tags=[f"ghcr.io/{full_name}:{tag}"],
                                 size_bytes=size, # 0 for now to speed up
                                 created_at=created_at,
                                 digest=digest,
-                                source=self.config.name
+                                source=self.config.name,
+                                bloat_score=analysis['score'],
+                                bloat_issues=json.dumps(analysis['issues']) if analysis['issues'] else None
                             ))
             except Exception as e:
                 logger.warning(f"Failed to fetch versions for {pkg_name}: {e}")
@@ -920,12 +931,17 @@ class DockerRegistryClient(BaseRegistryClient):
                                     created_at = datetime.fromisoformat(last_updated.replace('Z', '+00:00'))
                                 except: pass
                                 
+                            full_tag = f"{repo_name}:{tag['name']}"
+                            analysis = BloatAnalyzer.analyze_image([full_tag], size)
+                            
                             local_artifacts.append(ImageArtifact(
-                                tags=[f"{repo_name}:{tag['name']}"],
+                                tags=[full_tag],
                                 size_bytes=size,
                                 created_at=created_at,
                                 digest=tag.get('images', [{}])[0].get('digest', ''),
-                                source=self.config.name
+                                source=self.config.name,
+                                bloat_score=analysis['score'],
+                                bloat_issues=json.dumps(analysis['issues']) if analysis['issues'] else None
                             ))
                 except Exception as e:
                     logger.warning(f"Failed to fetch tags for {repo_name}: {e}")
@@ -988,12 +1004,17 @@ class DockerRegistryClient(BaseRegistryClient):
         except Exception:
             pass
             
+        full_tag = f"{repo}:{tag}"
+        analysis = BloatAnalyzer.analyze_image([full_tag], size)
+        
         return ImageArtifact(
-            tags=[f"{repo}:{tag}"],
+            tags=[full_tag],
             size_bytes=size,
             created_at=created,
             digest=digest,
-            source=self.config.name
+            source=self.config.name,
+            bloat_score=analysis['score'],
+            bloat_issues=json.dumps(analysis['issues']) if analysis['issues'] else None
         )
 
     def get_manifest_size(self, digest: str) -> int:
