@@ -213,3 +213,17 @@ class AppSettings(SQLModel, table=True):
     last_budget_alert_at: Optional[datetime] = Field(default=None) # Timestamp of last budget alert
     notification_urls: Optional[str] = Field(default=None, max_length=1000)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class MetricSnapshot(SQLModel, table=True):
+    """Daily snapshot of infrastructure metrics for trend analysis.
+    
+    Captured daily to visualize cost and usage trends over time.
+    """
+    id: Optional[int] = Field(default=None, primary_key=True)
+    date: datetime = Field(default_factory=datetime.utcnow, index=True)
+    total_images: int = Field(default=0)
+    total_volumes: int = Field(default=0)
+    total_gb: float = Field(default=0.0)
+    total_cost_usd: float = Field(default=0.0)
+    efficiency_score: int = Field(default=0)
