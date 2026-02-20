@@ -22,6 +22,8 @@ dependencies = [
     "python-jose[cryptography]",
     "passlib[bcrypt]",
     "apscheduler",
+    "prometheus-fastapi-instrumentator",
+    "prometheus-client",
 ]
 
 [project.optional-dependencies]

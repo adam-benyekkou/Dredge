@@ -1,8 +1,23 @@
-FROM python:3.11-slim
+# Stage 1: Builder
+FROM python:3.11-slim as builder
+
+WORKDIR /build
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy dependency specification
+COPY pyproject.toml ./
+
+# Install dependencies into a local directory
+RUN pip install --no-cache-dir --prefix=/install . cryptography
+
+# Stage 2: Runtime
+FROM python:3.11-slim as runtime
 
 # Create a non-root user
-# We need to create a group with GID 999 (common for docker group on linux hosts)
-# or allow passing the GID as an argument
 ARG DOCKER_GID=999
 RUN groupadd -g ${DOCKER_GID} docker && \
     groupadd -r dredge && \
@@ -10,27 +25,32 @@ RUN groupadd -g ${DOCKER_GID} docker && \
 
 WORKDIR /app
 
-# Copy dependency specification
-COPY pyproject.toml ./
+# Copy installed dependencies from builder
+COPY --from=builder /install /usr/local
 
-# Copy application code (needed for editable install or package discovery)
+# Copy application code and assets
 COPY app ./app
 COPY templates ./templates
 COPY static ./static
 
-# Install dependencies
-# We install as root to system paths, which is fine for containers
-RUN pip install --no-cache-dir . cryptography
-
-# Change ownership of the application directory to the non-root user
-# This allows the app to write the SQLite database to /app/dredge.db
+# Ensure the non-root user owns the application directory
+# This is required for the SQLite database (dredge.db)
 RUN chown -R dredge:dredge /app
 
 # Switch to non-root user
 USER dredge
 
-# Expose port
+# Healthcheck using python's built-in urllib to keep image slim
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD python3 -c 'import urllib.request; urllib.request.urlopen("http://localhost:8000/health")' || exit 1
+
+# Expose the default FastAPI port
 EXPOSE 8000
 
-# Run application
+# Metadata
+LABEL maintainer="adam-benyekkou <s.benyekkou@gmail.com>"
+LABEL org.opencontainers.image.title="Dredge"
+LABEL org.opencontainers.image.description="Docker FinOps & Lifecycle Management Tool"
+
+# Run the application
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

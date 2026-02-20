@@ -4,7 +4,8 @@ services:
   dredge:
     build: .
     container_name: dredge
-    user: root
+    # Removed user: root override to use the secure non-root user 'dredge'
+    # Ensure the host's docker.sock is readable by GID 999 or update DOCKER_GID in Dockerfile
     ports:
       - "8000:8000"
     volumes:
@@ -16,3 +17,11 @@ services:
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     environment:
       - PYTHONUNBUFFERED=1
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.1'
+          memory: 128M

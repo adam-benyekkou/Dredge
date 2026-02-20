@@ -18,6 +18,7 @@ from app.core.db import init_db, get_session
 from app.models import AppSettings, verify_password
 from app.core.auth_jwt import get_current_user, create_access_token, ACCESS_TOKEN_EXPIRE_MINUTES, SECRET_KEY, ALGORITHM
 from jose import jwt, JWTError
+from prometheus_fastapi_instrumentator import Instrumentator
 
 from app.core.logging import setup_logging
 setup_logging()
@@ -170,6 +171,9 @@ app.include_router(
 # Web/UI Routes (HTMX)
 app.include_router(web_router, dependencies=[Depends(get_current_user)])
 app.include_router(quarantine_router, dependencies=[Depends(get_current_user)])
+
+# Initialize Prometheus instrumentation
+Instrumentator().instrument(app).expose(app)
 
 
 @app.get("/health")

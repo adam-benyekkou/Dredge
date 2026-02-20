@@ -16,6 +16,7 @@ from app.core.registry import RegistryClientFactory, clear_image_cache
 from app.core.finops import CostCalculator
 from app.core.db import get_session
 from app.core.notify import send_notification
+from app.core.metrics import DREDGE_SPACE_FREED_BYTES
 from app.models import ImageStatus, AuditLog, RegistryConfig, RegistryType, AppSettings, CleanupPolicy, ImageArtifact, MetricSnapshot
 from app.core.scheduler import schedule_policy, unschedule_policy
 
@@ -1249,6 +1250,12 @@ async def purge_image(digest: str, response: Response, session: Session = Depend
             # Commit the transaction (includes deletes and client-added audit logs)
             session.commit()
             clear_image_cache()
+
+            # Increment SRE Metrics
+            try:
+                DREDGE_SPACE_FREED_BYTES.labels(source=source, action="purge").inc(image.size_bytes if image else 0)
+            except Exception as me:
+                logger.error(f"Failed to increment metrics: {me}")
 
             settings = session.get(AppSettings, 1)
             symbol = settings.currency_symbol if settings else "$"
