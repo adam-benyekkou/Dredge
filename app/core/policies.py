@@ -3,7 +3,7 @@
 import logging
 import re
 from datetime import datetime, timedelta
-from typing import List, Dict
+from typing import List, Dict, Any, Tuple
 from sqlmodel import Session, select
 
 from app.models import ImageArtifact, ImageStatus, CleanupPolicy, RegistryConfig
@@ -17,10 +17,24 @@ class PolicyEnforcer:
     def __init__(self, session: Session):
         self.session = session
         
-    def run_all(self) -> Dict[str, int]:
-        """Run all active policies."""
-        policies = self.session.exec(select(CleanupPolicy).where(CleanupPolicy.enabled == True)).all()
-        results = {"quarantined": 0, "errors": 0}
+    def run_all(self, dry_run: bool = False, ignore_enabled: bool = False) -> Dict[str, Any]:
+        """Run all active policies.
+        
+        Args:
+            dry_run: If True, don't actually quarantine images, just return candidates
+            ignore_enabled: If True, run all policies regardless of enabled status (for manual runs)
+        """
+        logger.info(f"PolicyEnforcer.run_all called with dry_run={dry_run}, ignore_enabled={ignore_enabled}")
+        
+        if ignore_enabled:
+            # Manual run - use all policies regardless of enabled status
+            policies = self.session.exec(select(CleanupPolicy)).all()
+        else:
+            # Automated run - only use enabled policies
+            policies = self.session.exec(select(CleanupPolicy).where(CleanupPolicy.enabled == True)).all()
+            
+        logger.info(f"PolicyEnforcer: Found {len(list(policies))} {'total' if ignore_enabled else 'enabled'} policies")
+        results = {"quarantined": 0, "errors": 0, "candidates": []}
         
         # 1. Sync latest state from registries (essential before applying policies)
         # In a real background job, we might skip this or do it separately.
@@ -36,11 +50,18 @@ class PolicyEnforcer:
         
         try:
             # Fetch all images
+            logger.info("PolicyEnforcer: Starting _fetch_all_images()")
             all_images = self._fetch_all_images()
+            logger.info(f"PolicyEnforcer: Finished _fetch_all_images(), got {len(all_images)} total images")
             
             for policy in policies:
-                count = self._apply_policy(policy, all_images)
-                results["quarantined"] += count
+                quarantine_list = self._apply_policy(policy, all_images, dry_run=dry_run)
+                results["quarantined"] += len(quarantine_list)
+                results["candidates"].extend(quarantine_list)
+            
+            if not dry_run and results["quarantined"] > 0:
+                from app.core.registry import clear_image_cache
+                clear_image_cache()
                 
         except Exception as e:
             logger.error(f"Policy run failed: {e}")
@@ -55,31 +76,40 @@ class PolicyEnforcer:
         # Local
         try:
             local = RegistryClientFactory.get_client().list_images()
+            logger.info(f"PolicyEnforcer: Fetched {len(local)} local images")
             images.extend(local)
-        except Exception: 
-            pass
+        except Exception as e: 
+            logger.error(f"PolicyEnforcer: Failed to fetch local images: {e}")
             
         # Remote
         remote_configs = self.session.exec(select(RegistryConfig).where(RegistryConfig.is_active == True)).all()
+        logger.info(f"PolicyEnforcer: Found {len(remote_configs)} active remote registries")
         for conf in remote_configs:
             try:
                 client = RegistryClientFactory.get_client(conf)
-                images.extend(client.list_images())
-            except Exception:
-                pass
-                
+                remote_imgs = client.list_images()
+                logger.info(f"PolicyEnforcer: Fetched {len(remote_imgs)} images from {conf.name}")
+                images.extend(remote_imgs)
+            except Exception as e:
+                logger.error(f"PolicyEnforcer: Failed to fetch from {conf.name}: {e}")
+        
+        logger.info(f"PolicyEnforcer: Total images fetched: {len(images)}")
         return images
 
-    def _apply_policy(self, policy: CleanupPolicy, images: List[ImageArtifact]) -> int:
+    def _apply_policy(self, policy: CleanupPolicy, images: List[ImageArtifact], dry_run: bool = False) -> List[ImageArtifact]:
         """Apply a single policy to the image list."""
-        quarantined_count = 0
+        logger.info(f"PolicyEnforcer._apply_policy: policy={policy.name}, total_images={len(images)}, keep_count={policy.keep_count}, max_age_days={policy.max_age_days}")
+        quarantine_list = []
         
         # Group by Repository (we clean up per repo)
         # Key: "source/repo_name"
         repos: Dict[str, List[ImageArtifact]] = {}
         
+        images_without_tags = 0
         for img in images:
-            if not img.tags: continue
+            if not img.tags:
+                images_without_tags += 1
+                continue
             
             # Parse repo name from first tag
             # tag format: "repo:tag" or "host/repo:tag"
@@ -90,9 +120,16 @@ class PolicyEnforcer:
             if key not in repos:
                 repos[key] = []
             repos[key].append(img)
+        
+        if images_without_tags > 0:
+            logger.warning(f"PolicyEnforcer: Skipped {images_without_tags} images without tags")
+        logger.info(f"PolicyEnforcer: Grouped images into {len(repos)} repositories")
+        
+        total_candidates = 0
             
         # Analyze each repo
         for repo_key, artifacts in repos.items():
+            logger.info(f"PolicyEnforcer: Processing repo '{repo_key}' with {len(artifacts)} images")
             # Sort by creation date (newest first)
             # Ensure all are naive for sorting to prevent TypeError
             def get_sort_date(x):
@@ -115,6 +152,9 @@ class PolicyEnforcer:
             # Rule 1: Keep Count
             # If we have 10 images, and keep_count is 3, we process the remaining 7
             candidates = artifacts[policy.keep_count:]
+            logger.info(f"PolicyEnforcer: Repo '{repo_key}' has {len(artifacts)} images, {len(candidates)} candidates after keep_count={policy.keep_count}")
+            
+            total_candidates += len(candidates)
             
             for img in candidates:
                 should_quarantine = False
@@ -131,6 +171,9 @@ class PolicyEnforcer:
                     age = now - created_at
                     if age.days > policy.max_age_days:
                         should_quarantine = True
+                        logger.debug(f"PolicyEnforcer: Image {img.tags[0] if img.tags else img.digest[:12]} is {age.days} days old (> {policy.max_age_days}), marking for quarantine")
+                    else:
+                        logger.debug(f"PolicyEnforcer: Image {img.tags[0] if img.tags else img.digest[:12]} is {age.days} days old (<= {policy.max_age_days}), skipping")
                 
                 # If only keep_count is set (max_age=0), implies "delete everything else"?
                 # Usually policies imply "Delete if Older Than X OR (Count > Y AND Older than Z)"
@@ -143,13 +186,17 @@ class PolicyEnforcer:
                     should_quarantine = True
                 
                 if should_quarantine:
-                    self._quarantine_image(img, policy)
-                    quarantined_count += 1
-                    
-        return quarantined_count
+                    if not dry_run:
+                        self._quarantine_image(img, policy)
+                    quarantine_list.append(img)
+        
+        logger.info(f"PolicyEnforcer._apply_policy: Total candidates across all repos: {total_candidates}, quarantined: {len(quarantine_list)}")
+        return quarantine_list
 
     def _quarantine_image(self, image: ImageArtifact, policy: CleanupPolicy):
         """Mark image as quarantined in DB."""
+        logger.info(f"PolicyEnforcer._quarantine_image called for image: {image.tags[0] if image.tags else image.digest[:12]}")
+        
         # Ensure created_at is naive for DB storage if that's the convention
         created_at = image.created_at
         if created_at and created_at.tzinfo is not None:
@@ -157,6 +204,8 @@ class PolicyEnforcer:
 
         # Check if already in DB
         db_image = self.session.exec(select(ImageArtifact).where(ImageArtifact.digest == image.digest)).first()
+        
+        logger.info(f"PolicyEnforcer: Image {'found' if db_image else 'not found'} in database")
         
         if not db_image:
             # Create new record
@@ -175,5 +224,25 @@ class PolicyEnforcer:
         # Set expiry (e.g., 24h from now)
         db_image.expires_at = datetime.utcnow() + timedelta(hours=24)
         self.session.add(db_image)
+        
+        # Audit log
+        from app.models import AuditLog
+        audit = AuditLog(
+            action="QUARANTINE",
+            image_id=image.digest,
+            image_tags=image.tags,
+            source=image.source,
+            bytes_freed=0,
+            savings_usd=0.0,
+            timestamp=datetime.utcnow()
+        )
+        self.session.add(audit)
+        
         self.session.commit()
+        self.session.refresh(db_image)
+        
+        logger.info(f"PolicyEnforcer: Successfully quarantined image ID={db_image.id}, digest={db_image.digest[:12]}, status={db_image.status}")
+        
+        from app.core.registry import clear_image_cache
+        clear_image_cache()
         logger.info(f"Quarantined image {image.tags} due to policy {policy.name}")

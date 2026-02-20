@@ -89,6 +89,15 @@
                 </li>
                 
                 <li>
+                    <a href="/quarantine" class="{% if request.url.path == '/quarantine' %}active{% endif %}">
+                        <div style="display: flex; align-items: center; gap: 0.75rem;">
+                            <i data-lucide="alert-triangle" size="18"></i>
+                            <span>Quarantine</span>
+                        </div>
+                    </a>
+                </li>
+                
+                <li>
                     <a href="/logs" class="{% if request.url.path == '/logs' %}active{% endif %}">
                         <div style="display: flex; align-items: center; gap: 0.75rem;">
                             <i data-lucide="clipboard-list" size="18"></i>

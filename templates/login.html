@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - Dredge</title>
+    
+    <!-- PicoCSS (Base) -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@1/css/pico.min.css">
+    
+    <!-- Deep Harbor Theme -->
+    <link rel="stylesheet" href="/static/css/theme.css">
+    
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <style>
+        body {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            background-color: var(--bg-deep);
+            padding: 1rem;
+        }
+        
+        .login-card {
+            background-color: var(--bg-surface);
+            padding: 2.5rem;
+            border-radius: 8px;
+            border: 1px solid var(--border-subtle);
+            width: 100%;
+            max-width: 400px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+        
+        .login-header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+        
+        .login-logo {
+            color: var(--primary);
+            width: 48px;
+            height: 48px;
+            margin-bottom: 1rem;
+        }
+        
+        .login-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--text-main);
+            margin-bottom: 0.5rem;
+        }
+        
+        .login-subtitle {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+        
+        input {
+            background-color: rgba(255,255,255,0.05) !important;
+            border-color: var(--border-subtle) !important;
+            color: var(--text-main) !important;
+        }
+        
+        input:focus {
+            border-color: var(--primary) !important;
+            box-shadow: 0 0 0 2px rgba(0, 119, 182, 0.2) !important;
+        }
+        
+        button {
+            background-color: var(--primary);
+            border: none;
+            width: 100%;
+            margin-top: 1rem;
+            font-weight: 600;
+        }
+        
+        button:hover {
+            background-color: var(--primary-hover);
+        }
+        
+        .error-message {
+            background-color: rgba(231, 76, 60, 0.1);
+            border: 1px solid var(--danger);
+            color: var(--danger);
+            padding: 0.75rem;
+            border-radius: 4px;
+            margin-bottom: 1.5rem;
+            font-size: 0.9rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-card">
+        <div class="login-header">
+            <i data-lucide="anchor" class="login-logo"></i>
+            <h1 class="login-title">Welcome Aboard</h1>
+            <p class="login-subtitle">Sign in to manage your Docker fleet</p>
+        </div>
+        
+        {% if error %}
+        <div class="error-message">
+            <i data-lucide="alert-circle" width="16"></i>
+            {{ error }}
+        </div>
+        {% endif %}
+        
+        <form action="/auth/login" method="post">
+            <label for="username">Username</label>
+            <input type="text" id="username" name="username" placeholder="Enter your username" required autofocus>
+            
+            <label for="password">Password</label>
+            <input type="password" id="password" name="password" placeholder="Enter your password" required>
+            
+            <button type="submit">Sign In</button>
+        </form>
+    </div>
+    
+    <script>
+        lucide.createIcons();
+    </script>
+</body>
+</html>

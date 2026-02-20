@@ -24,6 +24,7 @@
                 <th>Timestamp</th>
                 <th>Action</th>
                 <th>Image / Resource</th>
+                <th>Source</th>
                 <th>Space Freed</th>
                 <th>Monthly Savings</th>
             </tr>
@@ -31,18 +32,31 @@
         <tbody>
             {% if logs %}
                 {% for log in logs %}
-                <tr style="border-left: 4px solid {% if log.dry_run %}var(--accent){% else %}var(--danger){% endif %};">
+                <tr style="border-left: 4px solid {% if log.action == 'QUARANTINE' %}#f59e0b{% elif log.action == 'UNQUARANTINE' %}#10b981{% elif log.action == 'PURGE' or log.action == 'DELETE' %}var(--danger){% else %}var(--accent){% endif %};">
                     <td>{{ log.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</td>
                     <td>
-                        {% if log.dry_run %}
-                            <span style="color: var(--accent); font-weight: 600;">DRY RUN</span>
+                        {% if log.action == "QUARANTINE" %}
+                            <span class="badge badge-warning">QUARANTINE</span>
+                        {% elif log.action == "UNQUARANTINE" %}
+                            <span class="badge badge-success">UNQUARANTINE</span>
+                        {% elif log.action == "PURGE" %}
+                            <span class="badge badge-danger">PURGE</span>
+                        {% elif log.action == "DELETE" %}
+                            <span class="badge badge-danger">DELETE</span>
                         {% else %}
-                            <span style="color: var(--danger); font-weight: 600;">PURGED</span>
+                            <span class="badge badge-muted">{{ log.action }}</span>
+                        {% endif %}
+                        
+                        {% if log.dry_run %}
+                            <span class="badge badge-info" style="margin-top: 0.25rem; display: inline-block;">DRY RUN</span>
                         {% endif %}
                     </td>
                     <td>
                         <strong>{{ log.image_tags[0] if log.image_tags else log.image_id }}</strong>
                         <br><small style="color: var(--text-muted);">{{ log.image_id[:20] }}...</small>
+                    </td>
+                    <td>
+                        <span class="badge badge-secondary">{{ log.source }}</span>
                     </td>
                     <td>{{ (log.bytes_freed / 1024**3)|round(2) }} GB</td>
                     <td style="color: var(--accent); font-weight: 600;">{{ settings.currency_symbol }}{{ log.savings_usd|round(2) }}</td>
@@ -50,7 +64,7 @@
                 {% endfor %}
             {% else %}
                 <tr>
-                    <td colspan="5" style="text-align: center; color: var(--text-muted); padding: 3rem;">
+                    <td colspan="6" style="text-align: center; color: var(--text-muted); padding: 3rem;">
                         No logs available.
                     </td>
                 </tr>

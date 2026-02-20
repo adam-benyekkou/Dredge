@@ -30,6 +30,7 @@ export default defineConfig({
           { text: 'Images Lifecycle', link: '/concepts/images' },
           { text: 'Volumes Management', link: '/concepts/volumes' },
           { text: 'Cleanup Policies', link: '/concepts/policies' },
+          { text: 'Quarantine Management', link: '/concepts/quarantine' },
           { text: 'FinOps Metrics', link: '/concepts/finops' },
         ]
       },

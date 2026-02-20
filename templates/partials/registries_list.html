@@ -13,7 +13,7 @@
             {% for reg in registries %}
                 <tr id="registry-{{ reg.id }}">
                     <td><strong>{{ reg.name }}</strong></td>
-                    <td><span class="badge">{{ reg.type }}</span></td>
+                    <td><span class="badge">{{ reg.type.value }}</span></td>
                     <td><code>{{ reg.endpoint or "Default" }}</code></td>
                     <td>
                         {% if reg.is_active %}

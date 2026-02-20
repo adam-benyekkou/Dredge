@@ -1,0 +1,70 @@
+<dialog id="policy-preview-modal" open>
+    <article style="width: 700px; max-width: 90vw;">
+        <header>
+            <a href="#close" aria-label="Close" class="close" onclick="document.getElementById('policy-preview-modal').remove()"></a>
+            <h3>Policy Execution Preview</h3>
+        </header>
+        
+        <p>The following <strong>{{ quarantined_count }}</strong> images match your cleanup policies and will be <strong>quarantined</strong>:</p>
+        
+        <div style="max-height: 400px; overflow-y: auto; margin: 1rem 0; border: 1px solid var(--border-subtle); border-radius: 4px;">
+            <table style="margin-bottom: 0;">
+                <thead>
+                    <tr>
+                        <th>Image Tag</th>
+                        <th>Source</th>
+                        <th>Created</th>
+                        <th>Size</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for img in candidates %}
+                    <tr>
+                        <td>
+                            <div style="font-weight: 600; font-size: 0.85rem;">{{ img.tags[0] if img.tags else 'untagged' }}</div>
+                            <code style="font-size: 0.7rem; opacity: 0.7;">{{ img.digest[:12] }}</code>
+                        </td>
+                        <td><span class="badge" style="font-size: 0.7rem;">{{ img.source }}</span></td>
+                        <td style="font-size: 0.8rem;">{{ img.created_at.strftime('%Y-%m-%d') if img.created_at else '-' }}</td>
+                        <td style="font-size: 0.8rem;">{{ (img.size_bytes / (1024*1024))|round(1) }} MB</td>
+                    </tr>
+                    {% endfor %}
+                    {% if not candidates %}
+                    <tr>
+                        <td colspan="4" style="text-align: center; padding: 2rem; color: var(--text-muted);">
+                            No images matching current policies.
+                        </td>
+                    </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+        
+        <p style="font-size: 0.85rem; color: var(--text-muted);">
+            <i data-lucide="info" style="width: 14px; height: 14px; vertical-align: middle; margin-right: 0.25rem;"></i>
+            Quarantined images are not immediately deleted. They will be held for 24 hours before permanent removal.
+        </p>
+
+        <footer style="display: flex; justify-content: flex-end; gap: 1rem; margin-top: 2rem;">
+            <button type="button" class="secondary outline" onclick="document.getElementById('policy-preview-modal').remove()">Cancel</button>
+            <button type="button" class="primary" 
+                id="confirm-quarantine-btn"
+                hx-post="/policies/run?confirmed=true" 
+                hx-swap="none"
+                {% if not candidates %}disabled title="No images to quarantine"{% endif %}>
+                {% if candidates %}Confirm & Quarantine{% else %}No Action Needed{% endif %}
+            </button>
+        </footer>
+    </article>
+</dialog>
+
+<script>
+    lucide.createIcons();
+    
+    // Close modal on successful quarantine
+    document.body.addEventListener('htmx:afterRequest', function(event) {
+        if (event.detail.elt.id === 'confirm-quarantine-btn' && event.detail.successful) {
+            document.getElementById('policy-preview-modal').remove();
+        }
+    });
+</script>

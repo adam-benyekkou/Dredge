@@ -43,8 +43,8 @@
                     <button type="submit" class="primary">Update Policy</button>
                     
                     <button type="button" class="secondary outline" 
-                        hx-post="/policies/run" 
-                        hx-target="#policy-result"
+                        hx-post="/policies/run?preview=true" 
+                        hx-target="#policy-preview-container"
                         hx-swap="innerHTML"
                         style="border-color: var(--warning); color: var(--warning);">
                         <i data-lucide="play" style="width: 14px; height: 14px; margin-right: 0.5rem; vertical-align: middle;"></i>
@@ -55,6 +55,9 @@
                 {% if updated %}
                     <div style="margin-top: 1rem; color: #4ade80; font-size: 0.9rem;">✓ Policy updated</div>
                 {% endif %}
+                
+                <!-- Container for Preview Modal -->
+                <div id="policy-preview-container"></div>
                 
                 <!-- Result Container for Manual Run -->
                 <div id="policy-result" style="margin-top: 1rem;"></div>

@@ -1,6 +1,8 @@
 """API routes for Dredge"""
 
+import asyncio
 from html import escape
+
 from typing import List
 from datetime import datetime
 from fastapi import APIRouter, Request, Depends, HTTPException, Response
@@ -639,35 +641,27 @@ async def scan_images(request: Request, response: Response, session: Session = D
         limit = int(query_params.get("limit", 20))
         offset = int(query_params.get("offset", 0))
         source_filter = query_params.get("source", "All")
+        refresh = query_params.get("refresh", "false").lower() == "true"
         
         # Get settings for cost calc
         settings = session.get(AppSettings, 1)
         
-        # 1. Local
-        # We assume local is "first page" conceptually if offset < local_count, 
-        # but simpler to just fetch limit from each source for now or complex unified pagination.
-        # Given "Limit fetch to 20/page", we should distribute or fill.
+        # Parallel Fetching Strategy
+        tasks = []
         
-        # Strategy: Fetch 'limit' from ALL sources, then slice in memory for view?
-        # No, that defeats the purpose of optimization.
-        
-        # Optimization:
-        # If offset=0, fetch limit=20 from Local, limit=20 from Remotes.
-        # This might result in 20+20+20 images, which is fine.
-        # True offset pagination across distributed systems without a central DB is impossible efficiently.
-        # We will implement "Fetch Top N from each" approach.
-        
-        images = []
-        
-        # Local
+        # Local task
         if source_filter == "All" or source_filter == "Local":
-            try:
-                local_client = RegistryClientFactory.get_client()
-                images.extend(local_client.list_images(limit=limit))
-            except Exception as e:
-                logger.error(f"Failed to fetch local images: {e}")
+            async def fetch_local():
+                try:
+                    local_client = RegistryClientFactory.get_client()
+                    # Run the synchronous list_images in a thread to keep it non-blocking
+                    return await asyncio.to_thread(local_client.list_images, limit=limit, bypass_cache=refresh)
+                except Exception as e:
+                    logger.error(f"Failed to fetch local images: {e}")
+                    return []
+            tasks.append(fetch_local())
         
-        # Remote
+        # Remote tasks
         if source_filter != "Local":
             remote_configs = session.exec(select(RegistryConfig).where(RegistryConfig.is_active == True)).all()
             for config in remote_configs:
@@ -676,28 +670,24 @@ async def scan_images(request: Request, response: Response, session: Session = D
                 if source_filter != "All" and config.name != source_filter:
                     continue
 
-                try:
-                    remote_client = RegistryClientFactory.get_client(config)
-                    # Pass limit to remote client
-                    images.extend(remote_client.list_images(limit=limit))
-                except Exception as re:
-                    logger.error(f"Failed to fetch images from registry {config.name}: {str(re)}")
+                async def fetch_remote(conf=config):
+                    try:
+                        remote_client = RegistryClientFactory.get_client(conf)
+                        return await asyncio.to_thread(remote_client.list_images, limit=limit, bypass_cache=refresh)
+                    except Exception as re:
+                        logger.error(f"Failed to fetch images from registry {conf.name}: {str(re)}")
+                        return []
+                tasks.append(fetch_remote())
+
+        # Execute all fetches in parallel
+        results = await asyncio.gather(*tasks)
         
-        # Sort combined results (newest first) to ensure "Load More" makes sense
+        images = []
+        for res in results:
+            images.extend(res)
+        
+        # Sort combined results (newest first)
         images.sort(key=lambda x: x.created_at or datetime.min, reverse=True)
-        
-        # View Slicing (if we got more than needed due to multiple sources)
-        # If offset > 0, we assume the client is asking for the next batch.
-        # BUT since we can't easily "offset" remote APIs reliably without cursors, 
-        # for MVP we might just fetch (offset + limit) and slice the end?
-        # That's inefficient for deep pages but works for "Load More".
-        
-        # Better: Just return what we found. The "Load More" will just re-fetch with higher limit?
-        # Or we implementing infinite scroll?
-        
-        # User asked for "up to 20 registries per page".
-        # Let's just limit the TOTAL list to 'limit' for the first render.
-        # If request is standard scan (no params), default limit=20.
         
         # Calculate total stats (approximated based on fetched)
         total_size_bytes = sum(img.size_bytes for img in images)
@@ -719,6 +709,7 @@ async def scan_images(request: Request, response: Response, session: Session = D
             content='<p style="color: var(--danger);">Scan failed. Please check Docker daemon connection.</p>',
             status_code=500
         )
+
 
 
 @router.post("/images/{digest}/restore", response_class=HTMLResponse)
@@ -904,20 +895,38 @@ async def purge_image(digest: str, response: Response, session: Session = Depend
 
 @router.post("/policies/run", response_class=HTMLResponse)
 async def run_policies(request: Request, session: Session = Depends(get_session)):
-    """Manually trigger policy enforcement."""
+    """Manually trigger policy enforcement or preview candidates."""
     try:
+        query_params = request.query_params
+        preview = query_params.get("preview", "false").lower() == "true"
+        confirmed = query_params.get("confirmed", "false").lower() == "true"
+        
         from app.core.policies import PolicyEnforcer
         enforcer = PolicyEnforcer(session)
-        result = enforcer.run_all()
+        
+        # If we need a preview, run in dry_run mode
+        # For manual runs, ignore the enabled flag
+        if preview:
+            result = enforcer.run_all(dry_run=True, ignore_enabled=True)
+            return templates.TemplateResponse(
+                request,
+                "partials/policy_preview_modal.html",
+                {
+                    "request": request,
+                    "candidates": result["candidates"],
+                    "quarantined_count": len(result["candidates"])
+                }
+            )
+            
+        # Actual run (either direct or confirmed)
+        # For manual runs, ignore the enabled flag
+        result = enforcer.run_all(dry_run=False, ignore_enabled=True)
         
         msg = f"Policy Run Complete: Quarantined {result['quarantined']} images."
         if result['errors'] > 0:
             msg += f" ({result['errors']} errors occurred)"
             
         type = "success" if result['errors'] == 0 else "warning"
-        
-        # We assume this is called from the policies page, so we might want to refresh the view?
-        # But for now just a toast is fine.
         
         return HTMLResponse(
             content="",
@@ -928,5 +937,6 @@ async def run_policies(request: Request, session: Session = Depends(get_session)
         return HTMLResponse(
             content="",
             status_code=500,
-            headers={"HX-Trigger": f'{{"showMessage": {{"message": "Policy Run Failed: {escape(str(e))}", "type": "error"}}}}'}
+            headers={"HX-Trigger": f'{{"showMessage": {{"message": "Policy Run Failed: {str(e)}", "type": "error"}}}}'}
         )
+

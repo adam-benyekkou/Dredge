@@ -25,7 +25,8 @@ A powerful, nautical-themed platform for managing Docker infrastructure costs an
 - 🔍 **Multi-Registry Support** - Real API integration for scanning and deleting images from Local Docker, Docker Hub, and GHCR.
 - 📊 **FinOps Dashboard** - Track waste, efficiency scores, and reclaimable space with lazy-loaded, high-performance views.
 - 🗑️ **Mass Cleanup** - Batch delete images across multiple registries with asynchronous background processing.
-- 🛡️ **Lifecycle Policies** - Automated quarantine logic based on image age and count per repository.
+- 🛡️ **Lifecycle Policies** - Automated quarantine logic with preview-before-action safety, based on image age and count per repository.
+- 🔒 **Quarantine Management** - Dedicated quarantine page with bulk operations (unquarantine/purge) and real-time count updates.
 - 🔐 **JWT Security** - Secure access with JSON Web Token authentication and PBKDF2-SHA256 password hashing.
 - 📡 **Health Monitoring** - Automated registry health checks with proactive 5-minute pings and auto-disable for broken connections.
 - 🎨 **Deep Harbor UI** - Beautiful dark nautical theme with real-time toast notifications and interactive forms.

@@ -121,23 +121,27 @@ class CleanupPolicy(SQLModel, table=True):
 
 
 class AuditLog(SQLModel, table=True):
-    """Audit log for image deletion operations.
+    """Audit log for image lifecycle operations.
     
-    Tracks all deletion operations for compliance and cost analysis.
+    Tracks all image operations (quarantine, unquarantine, purge, delete) for compliance and cost analysis.
     
     Attributes:
         id: Primary key identifier
-        image_id: Digest of the deleted image
-        image_tags: Snapshot of image tags at deletion time
-        bytes_freed: Storage space freed by deletion (in bytes)
-        savings_usd: Monthly cost savings from deletion
-        timestamp: When the deletion occurred
+        action: Operation performed (QUARANTINE, UNQUARANTINE, PURGE, DELETE)
+        image_id: Digest of the image
+        image_tags: Snapshot of image tags at operation time
+        source: Registry source (Local, Docker Hub, GHCR, etc.)
+        bytes_freed: Storage space freed by deletion/purge (in bytes)
+        savings_usd: Monthly cost savings from deletion/purge
+        timestamp: When the operation occurred
         dry_run: Whether this was a dry-run operation (no actual deletion)
     """
     
     id: Optional[int] = Field(default=None, primary_key=True)
+    action: str = Field(max_length=50, index=True)  # QUARANTINE, UNQUARANTINE, PURGE, DELETE
     image_id: str = Field(max_length=255, index=True)
     image_tags: List[str] = Field(default=[], sa_column=Column(SAJSON))
+    source: str = Field(default="Local", max_length=255)
     bytes_freed: int = Field(default=0)
     savings_usd: float = Field(default=0.0)
     timestamp: datetime = Field(default_factory=datetime.utcnow, index=True)
@@ -193,7 +197,7 @@ class AppSettings(SQLModel, table=True):
     admin_username: str = Field(default="admin", max_length=100)
     admin_password: str = Field(default="admin", max_length=255) # Hashed password
     provider_name: str = Field(default="AWS", max_length=100)
-    custom_price_per_gb: float = Field(default=0.10) # Local / ECR / Default
+    custom_price_per_gb: float = Field(default=0.00) # Local / ECR / Default
     dockerhub_price_per_gb: float = Field(default=0.00) # Usually free for public, paid for private
     ghcr_price_per_gb: float = Field(default=0.00) # GitHub Storage
     github_hrc_price_per_gb: float = Field(default=0.00) # GitHub HRC Pricing
