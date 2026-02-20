@@ -771,7 +771,27 @@ async def test_notification(response: Response):
     return HTMLResponse(content="")
 
 
-@router.post("/scan-dashboard", response_class=HTMLResponse)
+@router.get("/api/metrics/history")
+async def metrics_history(session: Session = Depends(get_session)):
+    """Get metrics history for charts"""
+    try:
+        # Get last 30 days
+        cutoff = datetime.utcnow() - timedelta(days=30)
+        statement = select(MetricSnapshot).where(MetricSnapshot.date >= cutoff).order_by(MetricSnapshot.date)
+        snapshots = session.exec(statement).all()
+        
+        return [
+            {
+                "date": s.date.isoformat(),
+                "total_cost_usd": s.total_cost_usd,
+                "total_gb": s.total_gb,
+                "total_images": s.total_images
+            }
+            for s in snapshots
+        ]
+    except Exception as e:
+        logger.error(f"Failed to fetch metrics history: {e}")
+        return []
 async def scan_dashboard(request: Request, response: Response, session: Session = Depends(get_session)):
     """Scan Docker images/volumes and return dashboard summary"""
     try:
