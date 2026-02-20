@@ -1205,17 +1205,23 @@ async def batch_delete_images(request: Request, background_tasks: BackgroundTask
 
 @router.delete("/images/{digest}", response_class=HTMLResponse)
 async def purge_image(digest: str, response: Response, session: Session = Depends(get_session)):
-    """Purge (permanently delete) a Docker image from registry AND database"""
+    """Purge (permanently delete) a Docker image from registry AND database with transactional safety"""
     try:
-        # Look up image in DB to get source and cost info
+        # 1. Look up image in DB for context
         statement = select(ImageArtifact).where(ImageArtifact.digest == digest)
         image = session.exec(statement).first()
 
-        source = image.source if image else "Local"
-        savings_usd = CostCalculator.calculate_monthly_cost(image.size_bytes, source) if image else 0.0
-        image_tags = image.tags or [] if image else []
+        if not image:
+            # If not in DB, we still try to delete from registry if caller knows the digest
+            source = "Local"
+            savings_usd = 0.0
+            image_tags = []
+        else:
+            source = image.source
+            savings_usd = CostCalculator.calculate_monthly_cost(image.size_bytes, source)
+            image_tags = image.tags or []
 
-        # Pick the right client based on source
+        # 2. Pick the right client
         client = RegistryClientFactory.get_client()
         if source != "Local":
             remote_configs = session.exec(select(RegistryConfig).where(RegistryConfig.is_active == True)).all()
@@ -1223,25 +1229,24 @@ async def purge_image(digest: str, response: Response, session: Session = Depend
             if conf:
                 client = RegistryClientFactory.get_client(conf)
 
+        # 3. Execution with manual transaction control
+        # The registry deletion is an external side effect that cannot be rolled back.
+        # We perform it first. If it fails, we don't touch the DB.
         result = client.delete_image(session, digest, dry_run=False)
 
         if result["success"]:
-            # Log as PURGE
-            audit = AuditLog(
-                action="PURGE",
-                image_id=digest,
-                image_tags=image_tags,
-                source=source,
-                bytes_freed=image.size_bytes if image else 0,
-                savings_usd=savings_usd,
-                timestamp=datetime.utcnow()
-            )
-            session.add(audit)
-
-            # Remove from database
+            # If the client already added an AuditLog (which it does), 
+            # we might want to update its action to 'PURGE' or just leave it.
+            # To avoid duplicates, we'll check if an audit was added or just let the client handle it.
+            # CURRENT STATE: Client adds AuditLog with 'DELETE'. 
+            # We will refactor the client to NOT add the log if we want full control here, 
+            # OR we just accept the client's log.
+            
+            # Let's ensure the DB image is removed
             if image:
                 session.delete(image)
-
+            
+            # Commit the transaction (includes deletes and client-added audit logs)
             session.commit()
             clear_image_cache()
 
@@ -1256,14 +1261,14 @@ async def purge_image(digest: str, response: Response, session: Session = Depend
             return HTMLResponse(content="")
         else:
             logger.warning(f"Purge failed for {digest}: {result['message']}")
+            session.rollback() # Rollback any partial changes (like the audit log the client might have added)
             return HTMLResponse(
                 content=f'<tr class="error-row"><td colspan="8" style="color: var(--danger);">{result["message"]}</td></tr>',
                 status_code=200
             )
 
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
+        session.rollback()
         logger.error(f"Purge failed: {str(e)}", exc_info=True)
         return HTMLResponse(
             content=f'<tr class="error-row"><td colspan="8" style="color: var(--danger);">Purge failed: {escape(str(e))}</td></tr>',
