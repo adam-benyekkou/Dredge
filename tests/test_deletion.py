@@ -7,7 +7,7 @@ from sqlmodel.pool import StaticPool
 from docker.errors import APIError, ImageNotFound
 
 from app.core.registry import LocalDockerClient
-from app.models import AuditLog
+from app.models import AuditLog, AppSettings
 
 
 @pytest.fixture(name="session")
@@ -24,7 +24,7 @@ def session_fixture():
 
 
 @pytest.fixture(name="mock_docker_client")
-def mock_docker_client_fixture():
+def mock_docker_client_fixture(session):
     """Create a LocalDockerClient with mocked Docker client"""
     with patch('app.core.registry.docker.from_env') as mock_from_env:
         mock_client = MagicMock()
@@ -33,7 +33,12 @@ def mock_docker_client_fixture():
         # Create the LocalDockerClient (will use mocked docker.from_env)
         local_client = LocalDockerClient()
         
-        yield local_client, mock_client
+        # Patch engine for CostCalculator
+        # This ensures CostCalculator uses our test session's engine
+        from app.core import finops
+        # session.bind is the engine used by our test session
+        with patch('app.core.finops.engine', session.bind):
+            yield local_client, mock_client
 
 
 def create_mock_image(
@@ -247,6 +252,15 @@ def test_delete_image_with_tag_instead_of_digest(session: Session, mock_docker_c
 def test_delete_image_calculates_cost_savings(session: Session, mock_docker_client):
     """Test that cost savings are calculated correctly"""
     client, mock_client = mock_docker_client
+    
+    # Set custom price in settings
+    settings = session.get(AppSettings, 1)
+    if not settings:
+        settings = AppSettings(id=1)
+    settings.custom_price_per_gb = 0.10
+    session.add(settings)
+    session.commit()
+    session.refresh(settings)
     
     # Setup mock image with 1GB size
     size_1gb = 1024 ** 3  # 1 GB in bytes

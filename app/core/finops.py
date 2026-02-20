@@ -30,6 +30,7 @@ class CostCalculator:
         # Fetch settings from DB
         with Session(engine) as session:
             settings = session.get(AppSettings, 1)
+            
             if not settings:
                 return size_gb * 0.10
             

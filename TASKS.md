@@ -77,9 +77,55 @@
   - "nginx:latest (142MB) → Try nginx:alpine (41MB)"
 - [ ] Calculate "Potential Savings" (GB and $) if suggestions applied
 
-## Testing
+## Phase 4: SRE & Reliability Polish (The "SRE" Layer)
 
-### Task 4.1: E2E Tests
+### Task 4.1: Structured JSON Logging
+**Priority**: High (Observability)
+**Goal**: Improve log searchability in production environments.
+- [ ] Implement a custom JSON Formatter for the standard `logging` library
+- [ ] Replace `logging.basicConfig` with a structured configuration
+- [ ] Add contextual metadata (e.g., `registry_id`, `image_digest`) to log records
+
+### Task 4.2: Resilient Registry Clients
+**Priority**: High (Reliability)
+**Goal**: Handle transient network failures gracefully.
+- [ ] Implement exponential backoff retry logic for all Registry API calls (requests)
+- [ ] Audit and enforce strict timeouts on all external network requests
+- [ ] Add circuit breaker pattern for failing registries (optional/advanced)
+
+### Task 4.3: Transactional Integrity
+**Priority**: Medium (Data Integrity)
+**Goal**: Prevent orphaned data between Registry and Database.
+- [ ] Audit deletion routes to ensure DB transactions wrap both Audit Log creation and Artifact deletion
+- [ ] Implement explicit rollback logic in exception handlers for DB sessions
+- [ ] Ensure "Delete-from-Registry" and "Delete-from-DB" are logically synchronized
+
+## Phase 5: DevOps & Infrastructure Hardening (The "DevOps" Layer)
+
+### Task 5.1: Production-Grade Dockerfile
+**Priority**: Medium (Security)
+**Goal**: Minimize attack surface and improve startup reliability.
+- [ ] Refactor to a Multi-Stage Docker build (build vs runtime)
+- [ ] Add `HEALTHCHECK` instruction using `/health` endpoint
+- [ ] Ensure all dependencies are locked and installed via `pyproject.toml`
+
+### Task 5.2: Secure Container Orchestration
+**Priority**: High (Security)
+**Goal**: Apply least-privilege principles.
+- [ ] Fix `docker-compose.yml` to remove `user: root` override
+- [ ] Add Resource Limits (CPU/Memory) to prevent container runaway
+- [ ] Implement a `docker-compose.prod.yml` without volume mounts for source code
+
+### Task 5.3: Prometheus Metrics
+**Priority**: Medium (Observability)
+**Goal**: Enable real-time monitoring and alerting.
+- [ ] Integrate `prometheus-client` into FastAPI
+- [ ] Expose `/metrics` endpoint (protected or internal)
+- [ ] Track key SRE metrics: `dredge_space_freed_bytes_total`, `dredge_registry_latency_seconds`, `dredge_active_images_count`
+
+## Phase 6: Testing & Quality Assurance
+
+### Task 6.1: E2E Tests
 **Goal**: Verify new features work end-to-end.
 - [ ] Test Notification: Mock Apprise, call test endpoint, verify success
 - [ ] Test Budget: Set low budget, trigger scan, verify alert triggered (mocked)

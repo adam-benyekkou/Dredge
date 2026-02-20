@@ -104,10 +104,8 @@
                             <span class="badge badge-warning">QUARANTINE</span>
                         {% elif log.action == "UNQUARANTINE" %}
                             <span class="badge badge-success">UNQUARANTINE</span>
-                        {% elif log.action == "PURGE" %}
+                        {% elif log.action == "PURGE" or log.action == "DELETE" %}
                             <span class="badge badge-danger">PURGE</span>
-                        {% elif log.action == "DELETE" %}
-                            <span class="badge badge-danger">DELETE</span>
                         {% else %}
                             <span class="badge badge-muted">{{ log.action }}</span>
                         {% endif %}

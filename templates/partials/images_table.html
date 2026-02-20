@@ -24,7 +24,7 @@
                 
                 // Update button text with count
                 if (checkedCount > 0) {
-                    batchBtn.innerHTML = `<i data-lucide="trash-2" style="width: 16px; height: 16px; vertical-align: middle; margin-right: 0.25rem;"></i> Delete Selected (${checkedCount})`;
+                    batchBtn.innerHTML = `<i data-lucide="trash-2" style="width: 16px; height: 16px; vertical-align: middle; margin-right: 0.25rem;"></i> Purge Selected (${checkedCount})`;
                     lucide.createIcons();
                 }
             }
@@ -97,7 +97,7 @@
                                 class="btn-danger" 
                                 style="padding: 0.25rem 0.75rem; font-size: 0.8rem;"
                                 hx-delete="/images/{{ image.digest }}"
-                                hx-confirm="Are you sure you want to purge this image?"
+                                hx-confirm="⚠️ PERMANENTLY PURGE this image? This removes it from the registry AND the database. This action cannot be undone!"
                                 hx-target="#image-{{ image.digest.replace(':', '-') }}"
                                 hx-swap="outerHTML"
                             >

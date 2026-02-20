@@ -24,8 +24,12 @@ A powerful, nautical-themed platform for managing Docker infrastructure costs an
 - 💰 **Cost Visibility** - Real-time calculation of monthly storage costs with provider-specific pricing (Docker Hub, GHCR, etc.)
 - 🔍 **Multi-Registry Support** - Real API integration for scanning and deleting images from Local Docker, Docker Hub, and GHCR.
 - 📊 **FinOps Dashboard** - Track waste, efficiency scores, and reclaimable space with lazy-loaded, high-performance views.
+- 📈 **Cost Trends** - Visualize historical spending patterns with interactive line charts and daily snapshots.
+- 📦 **Bloat Detection** - Automatically identify oversized images and unoptimized base layers with smart recommendations.
+- 🔔 **Smart Alerts** - Receive notifications via Slack/Discord when monthly budget thresholds are exceeded.
 - 🗑️ **Mass Cleanup** - Batch delete images across multiple registries with asynchronous background processing.
 - 🛡️ **Lifecycle Policies** - Automated quarantine logic with preview-before-action safety, based on image age and count per repository.
+- 🤖 **Automation** - Schedule cleanup policies to run automatically via cron (Daily, Weekly, Monthly).
 - 🔒 **Quarantine Management** - Dedicated quarantine page with bulk operations (unquarantine/purge) and real-time count updates.
 - 🔐 **JWT Security** - Secure access with JSON Web Token authentication and PBKDF2-SHA256 password hashing.
 - 📡 **Health Monitoring** - Automated registry health checks with proactive 5-minute pings and auto-disable for broken connections.

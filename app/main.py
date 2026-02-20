@@ -19,11 +19,8 @@ from app.models import AppSettings, verify_password
 from app.core.auth_jwt import get_current_user, create_access_token, ACCESS_TOKEN_EXPIRE_MINUTES, SECRET_KEY, ALGORITHM
 from jose import jwt, JWTError
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+from app.core.logging import setup_logging
+setup_logging()
 
 # Initialize FastAPI app
 app = FastAPI(

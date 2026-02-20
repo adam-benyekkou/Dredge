@@ -303,7 +303,8 @@ class LocalDockerClient(BaseRegistryClient):
                     f"DRY RUN: Would delete image {image_tags[0]} "
                     f"({size_bytes / (1024**3):.2f} GB, ${monthly_cost:.2f}/mo savings)"
                 )
-                logger.info(result["message"])
+                    logger.info(result["message"], extra={"image_id": actual_digest, "dry_run": False})
+
                 
                 # Record dry-run in audit log
                 audit_entry = AuditLog(
@@ -326,7 +327,8 @@ class LocalDockerClient(BaseRegistryClient):
                         f"Successfully deleted image {image_tags[0]} "
                         f"({size_bytes / (1024**3):.2f} GB freed, ${monthly_cost:.2f}/mo savings)"
                     )
-                    logger.info(result["message"])
+                logger.info(result["message"], extra={"image_id": actual_digest, "dry_run": True})
+
                     
                     # Record real deletion in audit log
                     audit_entry = AuditLog(
@@ -806,17 +808,11 @@ class DockerRegistryClient(BaseRegistryClient):
             try:
                 owner = pkg.get("owner", {}).get("login")
                 full_name = f"{owner}/{pkg_name}"
-                
-                # Fetch versions
                 v_url = f"https://api.github.com/user/packages/container/{pkg_name}/versions"
-                # Use a fresh request or handle headers manually to avoid session conflicts in threads
-                headers = {
-                    "Accept": "application/vnd.github+json",
-                    "X-GitHub-Api-Version": "2022-11-28",
-                    "Authorization": f"Basic {auth_str}"
-                }
-                v_resp = requests.get(v_url, headers=headers, params={"per_page": 20}, timeout=10)
                 
+                # Use the existing gh_session for version fetching
+                v_resp = gh_session.get(v_url, params={"per_page": 20}, timeout=10)
+
                 if v_resp.status_code == 200:
                     versions = v_resp.json()
                     for ver in versions:
@@ -918,7 +914,7 @@ class DockerRegistryClient(BaseRegistryClient):
                     
                     tags_url = f"https://hub.docker.com/v2/repositories/{repo_name}/tags"
                     # Just fetch one page of recent tags
-                    tags_resp = requests.get(tags_url, headers=headers, params={"page_size": 25}, timeout=10)
+                    tags_resp = hub_session.get(tags_url, params={"page_size": 25}, timeout=10)
                     
                     if tags_resp.status_code == 200:
                         tags = tags_resp.json().get("results", [])

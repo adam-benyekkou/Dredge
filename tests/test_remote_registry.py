@@ -3,6 +3,12 @@ from unittest.mock import MagicMock, patch
 from app.models import RegistryConfig, RegistryType
 from app.core.registry import DockerRegistryClient, ImageArtifact
 
+@pytest.fixture(autouse=True)
+def bypass_image_cache():
+    """Bypass image cache for all tests to ensure fresh listings"""
+    with patch("app.core.registry.get_cached_images", return_value=None):
+        yield
+
 @pytest.fixture
 def mock_config():
     return RegistryConfig(
