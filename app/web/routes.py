@@ -16,7 +16,7 @@ from app.core.registry import RegistryClientFactory
 from app.core.finops import CostCalculator
 from app.core.db import get_session
 from app.core.notify import send_notification
-from app.models import ImageStatus, AuditLog, RegistryConfig, RegistryType, AppSettings, CleanupPolicy, ImageArtifact
+from app.models import ImageStatus, AuditLog, RegistryConfig, RegistryType, AppSettings, CleanupPolicy, ImageArtifact, MetricSnapshot
 from app.core.scheduler import schedule_policy, unschedule_policy
 
 router = APIRouter()

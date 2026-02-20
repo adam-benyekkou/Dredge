@@ -13,6 +13,7 @@ from app.core.db import engine
 from app.core.policies import PolicyEnforcer
 from app.models import CleanupPolicy
 from app.core.finops import check_budget
+from app.core.analytics import capture_daily_snapshot
 
 logger = logging.getLogger(__name__)
 
@@ -162,6 +163,14 @@ def start_scheduler():
             id='daily_budget_check',
             replace_existing=True
         )
+        
+        # Add daily metric snapshot (23:59 UTC)
+        sched.add_job(
+            run_daily_snapshot,
+            trigger=CronTrigger.from_crontab('59 23 * * *', timezone='UTC'),
+            id='daily_metric_snapshot',
+            replace_existing=True
+        )
 
 
 async def run_daily_budget_check():
@@ -172,6 +181,15 @@ async def run_daily_budget_check():
             logger.info("Executed daily budget check")
     except Exception as e:
         logger.error(f"Failed to execute budget check: {e}", exc_info=True)
+
+
+async def run_daily_snapshot():
+    """Capture daily metrics snapshot"""
+    try:
+        with Session(engine) as session:
+            await capture_daily_snapshot(session)
+    except Exception as e:
+        logger.error(f"Failed to capture daily snapshot: {e}", exc_info=True)
 
 
 def shutdown_scheduler():

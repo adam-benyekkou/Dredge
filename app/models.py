@@ -69,6 +69,8 @@ class ImageArtifact(SQLModel, table=True):
     source: str = Field(default="Local", max_length=255)
     status: ImageStatus = Field(default=ImageStatus.ACTIVE)
     expires_at: Optional[datetime] = Field(default=None)
+    bloat_score: int = Field(default=100) # 0-100 (100 = Optimized)
+    bloat_issues: Optional[str] = Field(default=None) # JSON list of issues
 
 
 class VolumeArtifact(SQLModel, table=True):

@@ -38,6 +38,15 @@ def init_db():
                 connection.exec_driver_sql("ALTER TABLE appsettings ADD COLUMN monthly_budget FLOAT DEFAULT 0.0")
             if "last_budget_alert_at" not in columns:
                 connection.exec_driver_sql("ALTER TABLE appsettings ADD COLUMN last_budget_alert_at TIMESTAMP")
+        
+        with engine.connect() as connection:
+            result = connection.exec_driver_sql("PRAGMA table_info(imageartifact)")
+            columns = [row[1] for row in result.fetchall()]
+            if "bloat_score" not in columns:
+                connection.exec_driver_sql("ALTER TABLE imageartifact ADD COLUMN bloat_score INTEGER DEFAULT 100")
+            if "bloat_issues" not in columns:
+                connection.exec_driver_sql("ALTER TABLE imageartifact ADD COLUMN bloat_issues VARCHAR")
+                
     except Exception as e:
         print(f"Migration warning: {e}")
     
