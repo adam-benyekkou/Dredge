@@ -209,5 +209,7 @@ class AppSettings(SQLModel, table=True):
     ghcr_price_per_gb: float = Field(default=0.00) # GitHub Storage
     github_hrc_price_per_gb: float = Field(default=0.00) # GitHub HRC Pricing
     currency_symbol: str = Field(default="$", max_length=5)
+    monthly_budget: float = Field(default=0.00) # Monthly budget goal (0 = disabled)
+    last_budget_alert_at: Optional[datetime] = Field(default=None) # Timestamp of last budget alert
     notification_urls: Optional[str] = Field(default=None, max_length=1000)
     updated_at: datetime = Field(default_factory=datetime.utcnow)

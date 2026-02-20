@@ -31,6 +31,14 @@
         </div>
 
         <div class="grid" style="margin-top: 1rem;">
+            <label for="monthly_budget">Monthly Budget Goal
+                <input type="number" id="monthly_budget" name="monthly_budget" step="0.01" value="{{ settings.monthly_budget }}">
+                <small>Alert when monthly cost forecast exceeds this amount (0 to disable)</small>
+            </label>
+            <div style="flex: 1;"></div>
+        </div>
+
+        <div class="grid" style="margin-top: 1rem;">
             <label for="dockerhub_price_per_gb">Docker Hub Price per GB
                 <input type="number" id="dockerhub_price_per_gb" name="dockerhub_price_per_gb" step="0.01" value="{{ settings.dockerhub_price_per_gb }}">
                 <small>Normally free for public, varies for private</small>

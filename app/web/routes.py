@@ -60,6 +60,10 @@ async def dashboard(request: Request, session: Session = Depends(get_session)):
     except Exception as e:
         logger.error(f"Failed to fetch dashboard metrics: {e}")
         
+    budget_percent = 0
+    if settings and settings.monthly_budget > 0:
+        budget_percent = (monthly_waste / settings.monthly_budget) * 100
+        
     return templates.TemplateResponse(
         request,
         "dashboard.html",
@@ -71,7 +75,8 @@ async def dashboard(request: Request, session: Session = Depends(get_session)):
             "efficiency": efficiency,
             "total_images": total_images,
             "total_volumes": total_volumes,
-            "has_scanned": has_scanned
+            "has_scanned": has_scanned,
+            "budget_percent": budget_percent
         }
     )
 
@@ -696,6 +701,11 @@ async def update_settings(request: Request, session: Session = Depends(get_sessi
             settings.github_hrc_price_per_gb = float(form_data.get("github_hrc_price_per_gb", 0.00))
         except (ValueError, TypeError):
             settings.github_hrc_price_per_gb = 0.00
+            
+        try:
+            settings.monthly_budget = float(form_data.get("monthly_budget", 0.00))
+        except (ValueError, TypeError):
+            settings.monthly_budget = 0.00
             
     elif section == "notifications":
         settings.notification_urls = str(form_data.get("notification_urls", "")).strip() or None

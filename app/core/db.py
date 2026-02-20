@@ -27,6 +27,20 @@ def init_db():
     
     SQLModel.metadata.create_all(engine)
     
+    # Simple migration for new fields (SQLite specific)
+    # Check if monthly_budget exists in appsettings
+    try:
+        with engine.connect() as connection:
+            # Check for monthly_budget column
+            result = connection.exec_driver_sql("PRAGMA table_info(appsettings)")
+            columns = [row[1] for row in result.fetchall()]
+            if "monthly_budget" not in columns:
+                connection.exec_driver_sql("ALTER TABLE appsettings ADD COLUMN monthly_budget FLOAT DEFAULT 0.0")
+            if "last_budget_alert_at" not in columns:
+                connection.exec_driver_sql("ALTER TABLE appsettings ADD COLUMN last_budget_alert_at TIMESTAMP")
+    except Exception as e:
+        print(f"Migration warning: {e}")
+    
     # Initialize default settings
     from app.models import AppSettings, hash_password
     with Session(engine) as session:

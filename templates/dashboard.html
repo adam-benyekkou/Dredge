@@ -57,6 +57,43 @@
     </article>
 </div>
 
+{% if settings.monthly_budget > 0 %}
+<article class="card" style="margin-bottom: 1.5rem; border-left: 4px solid {% if budget_percent > 100 %}var(--danger){% elif budget_percent > 75 %}#f59e0b{% else %}var(--accent){% endif %};">
+    <header class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+        <span style="display: flex; align-items: center; gap: 0.5rem;">
+            <i data-lucide="pie-chart" style="width: 18px; height: 18px;"></i>
+            Budget Status
+        </span>
+        <span style="font-size: 0.9rem; font-weight: 600;">
+            {{ settings.currency_symbol }}{{ monthly_waste|default(0)|round(2) }} / {{ settings.currency_symbol }}{{ settings.monthly_budget|round(2) }}
+        </span>
+    </header>
+    <div class="card-body" style="padding-top: 0.5rem;">
+        {% set percent = budget_percent if budget_percent else 0 %}
+        {% set color = 'var(--accent)' %}
+        {% if percent > 100 %}
+            {% set color = 'var(--danger)' %}
+        {% elif percent > 75 %}
+            {% set color = '#f59e0b' %}
+        {% endif %}
+        
+        <div style="background: rgba(255,255,255,0.1); height: 20px; border-radius: 10px; overflow: hidden; position: relative;">
+            <div style="background: {{ color }}; width: {{ percent|min(100) }}%; height: 100%; transition: width 0.5s ease;"></div>
+            <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: 700; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,0.8);">
+                {{ percent|round(1) }}% Used
+            </div>
+        </div>
+        
+        {% if percent > 100 %}
+        <p style="margin: 0.5rem 0 0 0; font-size: 0.85rem; color: var(--danger); display: flex; align-items: center; gap: 0.5rem;">
+            <i data-lucide="alert-triangle" style="width: 14px; height: 14px;"></i>
+            Budget exceeded by {{ settings.currency_symbol }}{{ (monthly_waste - settings.monthly_budget)|round(2) }}
+        </p>
+        {% endif %}
+    </div>
+</article>
+{% endif %}
+
 {% if registry_count == 0 %}
 <article class="card" id="registry-alert" style="border-color: var(--danger); background-color: rgba(217, 125, 84, 0.05); margin-top: 0; margin-bottom: 1.5rem;">
     <div class="card-body" style="display: flex; align-items: center; gap: 1rem; position: relative;">

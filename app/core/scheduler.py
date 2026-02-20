@@ -12,6 +12,7 @@ from sqlmodel import Session, select
 from app.core.db import engine
 from app.core.policies import PolicyEnforcer
 from app.models import CleanupPolicy
+from app.core.finops import check_budget
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +43,9 @@ async def run_scheduled_policy(policy_id: int):
     
     try:
         with Session(engine) as session:
+            # Also run budget check when policies run (as it's a good time to check)
+            await check_budget(session)
+            
             policy = session.get(CleanupPolicy, policy_id)
             
             if not policy:
@@ -150,6 +154,24 @@ def start_scheduler():
         
         # Load existing policies
         load_all_policies()
+        
+        # Add daily budget check (9am UTC)
+        sched.add_job(
+            run_daily_budget_check,
+            trigger=CronTrigger.from_crontab('0 9 * * *', timezone='UTC'),
+            id='daily_budget_check',
+            replace_existing=True
+        )
+
+
+async def run_daily_budget_check():
+    """Execute daily budget check"""
+    try:
+        with Session(engine) as session:
+            await check_budget(session)
+            logger.info("Executed daily budget check")
+    except Exception as e:
+        logger.error(f"Failed to execute budget check: {e}", exc_info=True)
 
 
 def shutdown_scheduler():

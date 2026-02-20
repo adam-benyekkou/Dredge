@@ -44,3 +44,45 @@ class CostCalculator:
                 price = settings.custom_price_per_gb
                 
         return size_gb * price
+
+
+async def check_budget(session: Session):
+    """Check if current usage exceeds budget and notify"""
+    from app.core.registry import RegistryClientFactory
+    from app.core.notify import send_notification
+    from datetime import datetime
+    
+    settings = session.get(AppSettings, 1)
+    if not settings or settings.monthly_budget <= 0:
+        return
+
+    # Calculate current total cost
+    try:
+        client = RegistryClientFactory.get_client()
+        images = client.list_images()
+        volumes = client.list_volumes()
+        
+        total_cost = 0
+        for img in images:
+            total_cost += CostCalculator.calculate_monthly_cost(img.size_bytes, img.source)
+        for vol in volumes:
+            total_cost += CostCalculator.calculate_monthly_cost(vol.size_bytes, vol.source)
+            
+        if total_cost > settings.monthly_budget:
+            # Check if alert sent today
+            today = datetime.utcnow().date()
+            if settings.last_budget_alert_at and settings.last_budget_alert_at.date() == today:
+                return
+                
+            await send_notification(
+                title="⚠️ Budget Exceeded",
+                body=f"Current monthly spend ({settings.currency_symbol}{total_cost:.2f}) has exceeded your budget of {settings.currency_symbol}{settings.monthly_budget:.2f}."
+            )
+            
+            settings.last_budget_alert_at = datetime.utcnow()
+            session.add(settings)
+            session.commit()
+            
+    except Exception as e:
+        # Don't crash scheduler if registry check fails
+        print(f"Budget check failed: {e}")
