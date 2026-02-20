@@ -2,14 +2,15 @@
 
 import asyncio
 from html import escape
+from typing import List, Optional
+from datetime import datetime, timedelta
 
-from typing import List
-from datetime import datetime
-from fastapi import APIRouter, Request, Depends, HTTPException, Response
+from fastapi import APIRouter, Request, Depends, HTTPException, Response, BackgroundTasks
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 import logging
 from sqlmodel import Session, select, col
+from sqlalchemy import func
 
 from app.core.registry import RegistryClientFactory
 from app.core.finops import CostCalculator
@@ -48,40 +49,28 @@ async def dashboard(request: Request, session: Session = Depends(get_session)):
         total_images = len(images)
         total_volumes = len(volumes)
         
-        # Calculate real metrics using specific source prices
-        monthly_waste = 0
-        total_bytes = 0
-        
+        # Simple cost logic
         for img in images:
-            total_bytes += img.size_bytes
             monthly_waste += CostCalculator.calculate_monthly_cost(img.size_bytes, img.source)
+            reclaimable_gb += img.size_bytes / (1024**3)
             
-        for vol in volumes:
-            total_bytes += vol.size_bytes
-            monthly_waste += CostCalculator.calculate_monthly_cost(vol.size_bytes, vol.source)
+        has_scanned = True
         
-        if total_bytes > 0:
-            has_scanned = True
-            reclaimable_gb = total_bytes / (1024 ** 3)
-            # monthly_waste already calculated above
-            
-            # Simple efficiency calculation (100% if nothing to clean, lower if there's waste)
-            efficiency = 100
     except Exception as e:
-        logger.warning(f"Could not fetch Docker metrics for dashboard: {e}")
-    
+        logger.error(f"Failed to fetch dashboard metrics: {e}")
+        
     return templates.TemplateResponse(
         request,
         "dashboard.html",
         {
+            "settings": settings,
+            "reg_count": reg_count,
             "monthly_waste": monthly_waste,
             "reclaimable_gb": reclaimable_gb,
             "efficiency": efficiency,
-            "registry_count": reg_count,
-            "settings": settings,
-            "has_scanned": has_scanned,
             "total_images": total_images,
             "total_volumes": total_volumes,
+            "has_scanned": has_scanned
         }
     )
 
@@ -224,11 +213,69 @@ async def update_policy(request: Request, session: Session = Depends(get_session
 
 
 @router.get("/logs", response_class=HTMLResponse)
-async def logs_view(request: Request, session: Session = Depends(get_session)):
-    """Render the logs view"""
-    # Fetch latest 50 logs
-    statement = select(AuditLog).order_by(col(AuditLog.timestamp).desc()).limit(50)
+async def logs_view(
+    request: Request,
+    session: Session = Depends(get_session),
+    page: int = 1,
+    limit: int = 50,
+    action_filter: Optional[str] = None,
+    source_filter: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None
+):
+    """Render the logs view with pagination and filters"""
+    # Build base query
+    statement = select(AuditLog)
+    
+    # Apply action filter
+    if action_filter and action_filter != "ALL":
+        statement = statement.where(AuditLog.action == action_filter)
+    
+    # Apply source filter
+    if source_filter and source_filter != "ALL":
+        statement = statement.where(AuditLog.source == source_filter)
+    
+    # Apply date range filter
+    if date_from:
+        try:
+            from_date = datetime.strptime(date_from, "%Y-%m-%d")
+            statement = statement.where(AuditLog.timestamp >= from_date)
+        except ValueError:
+            pass
+    
+    if date_to:
+        try:
+            to_date = datetime.strptime(date_to, "%Y-%m-%d")
+            # Add 1 day to include the entire end date
+            to_date = to_date + timedelta(days=1)
+            statement = statement.where(AuditLog.timestamp < to_date)
+        except ValueError:
+            pass
+    
+    # Get total count with filters applied
+    count_statement = select(func.count()).select_from(statement.alias())
+    total_count = session.exec(count_statement).one()
+    
+    # Calculate offset
+    offset = (page - 1) * limit
+    
+    # Fetch paginated logs
+    statement = statement.order_by(col(AuditLog.timestamp).desc()).limit(limit).offset(offset)
     logs = session.exec(statement).all()
+    
+    # Calculate pagination metadata
+    total_pages = max(1, (total_count + limit - 1) // limit)
+    has_prev = page > 1
+    has_next = page < total_pages
+    
+    # Get unique actions and sources for filter dropdowns
+    unique_actions = session.exec(
+        select(AuditLog.action).distinct().order_by(AuditLog.action)
+    ).all()
+    unique_sources = session.exec(
+        select(AuditLog.source).distinct().order_by(AuditLog.source)
+    ).all()
+    
     settings = session.get(AppSettings, 1)
     
     return templates.TemplateResponse(
@@ -237,7 +284,104 @@ async def logs_view(request: Request, session: Session = Depends(get_session)):
         {
             "logs": logs,
             "settings": settings,
+            "page": page,
+            "limit": limit,
+            "total_count": total_count,
+            "total_pages": total_pages,
+            "has_prev": has_prev,
+            "has_next": has_next,
+            "action_filter": action_filter or "ALL",
+            "source_filter": source_filter or "ALL",
+            "date_from": date_from or "",
+            "date_to": date_to or "",
+            "unique_actions": unique_actions,
+            "unique_sources": unique_sources,
         }
+    )
+
+
+@router.get("/logs/export")
+async def export_logs(
+    request: Request,
+    session: Session = Depends(get_session),
+    action_filter: Optional[str] = None,
+    source_filter: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None
+):
+    """Export audit logs to CSV with filters applied"""
+    from fastapi.responses import StreamingResponse
+    import csv
+    from io import StringIO
+    
+    # Build query with same filter logic as logs_view
+    statement = select(AuditLog)
+    
+    if action_filter and action_filter != "ALL":
+        statement = statement.where(AuditLog.action == action_filter)
+    
+    if source_filter and source_filter != "ALL":
+        statement = statement.where(AuditLog.source == source_filter)
+    
+    if date_from:
+        try:
+            from_date = datetime.strptime(date_from, "%Y-%m-%d")
+            statement = statement.where(AuditLog.timestamp >= from_date)
+        except ValueError:
+            pass
+    
+    if date_to:
+        try:
+            to_date = datetime.strptime(date_to, "%Y-%m-%d")
+            to_date = to_date + timedelta(days=1)
+            statement = statement.where(AuditLog.timestamp < to_date)
+        except ValueError:
+            pass
+    
+    statement = statement.order_by(col(AuditLog.timestamp).desc())
+    logs = session.exec(statement).all()
+    
+    # Get settings for currency symbol
+    settings = session.get(AppSettings, 1)
+    symbol = settings.currency_symbol if settings else "$"
+    
+    # Create CSV
+    output = StringIO()
+    writer = csv.writer(output)
+    
+    # Write header
+    writer.writerow([
+        "Timestamp",
+        "Action",
+        "Source",
+        "Image/Resource",
+        "Image ID",
+        "Space Freed (GB)",
+        f"Monthly Savings ({symbol})",
+        "Dry Run"
+    ])
+    
+    # Write data
+    for log in logs:
+        writer.writerow([
+            log.timestamp.strftime('%Y-%m-%d %H:%M:%S'),
+            log.action,
+            log.source,
+            log.image_tags[0] if log.image_tags else log.image_id[:20],
+            log.image_id,
+            round(log.bytes_freed / (1024**3), 2),
+            round(log.savings_usd, 2),
+            "Yes" if log.dry_run else "No"
+        ])
+    
+    # Return as downloadable file
+    output.seek(0)
+    filename = f"dredge_audit_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.csv"
+    
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
     )
 
 

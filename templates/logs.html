@@ -12,6 +12,71 @@
 {% endblock %}
 
 {% block content %}
+<form method="get" action="/logs" style="margin-bottom: 2rem; padding: 1.5rem; background: var(--bg-surface); border-radius: 8px; border: 1px solid var(--border-subtle);">
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+        <!-- Action filter -->
+        <div>
+            <label for="action-filter" style="display: block; margin-bottom: 0.5rem; color: var(--text-muted); font-size: 0.9rem;">
+                Action
+            </label>
+            <select name="action_filter" id="action-filter" style="width: 100%; margin-bottom: 0;">
+                <option value="ALL" {% if action_filter == "ALL" %}selected{% endif %}>All Actions</option>
+                {% for action in unique_actions %}
+                <option value="{{ action }}" {% if action_filter == action %}selected{% endif %}>
+                    {{ action }}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+        
+        <!-- Source filter -->
+        <div>
+            <label for="source-filter" style="display: block; margin-bottom: 0.5rem; color: var(--text-muted); font-size: 0.9rem;">
+                Source
+            </label>
+            <select name="source_filter" id="source-filter" style="width: 100%; margin-bottom: 0;">
+                <option value="ALL" {% if source_filter == "ALL" %}selected{% endif %}>All Sources</option>
+                {% for source in unique_sources %}
+                <option value="{{ source }}" {% if source_filter == source %}selected{% endif %}>
+                    {{ source }}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+        
+        <!-- Date from -->
+        <div>
+            <label for="date-from" style="display: block; margin-bottom: 0.5rem; color: var(--text-muted); font-size: 0.9rem;">
+                From Date
+            </label>
+            <input type="date" name="date_from" id="date-from" value="{{ date_from }}" style="width: 100%; margin-bottom: 0;">
+        </div>
+        
+        <!-- Date to -->
+        <div>
+            <label for="date-to" style="display: block; margin-bottom: 0.5rem; color: var(--text-muted); font-size: 0.9rem;">
+                To Date
+            </label>
+            <input type="date" name="date_to" id="date-to" value="{{ date_to }}" style="width: 100%; margin-bottom: 0;">
+        </div>
+    </div>
+    
+    <div style="margin-top: 1.5rem; display: flex; gap: 1rem;">
+        <button type="submit" class="primary" style="padding: 0.5rem 1.5rem; font-size: 0.9rem;">
+            <i data-lucide="filter" style="width: 14px; height: 14px; margin-right: 0.5rem; vertical-align: middle;"></i>
+            Apply Filters
+        </button>
+        <a href="/logs" class="btn outline" style="padding: 0.5rem 1.5rem; text-decoration: none; font-size: 0.9rem; display: inline-flex; align-items: center;">
+            <i data-lucide="x" style="width: 14px; height: 14px; margin-right: 0.5rem; vertical-align: middle;"></i>
+            Clear Filters
+        </a>
+    </div>
+    
+    <!-- Hidden fields to preserve pagination state -->
+    <input type="hidden" name="page" value="1">
+    <input type="hidden" name="limit" value="{{ limit }}">
+</form>
+
 <div class="card">
     <header>
         <h3 style="margin-bottom: 0;">Audit History</h3>
@@ -73,19 +138,76 @@
     </table>
 </div>
 
-<script>
-function exportLogs() {
-    const rows = Array.from(document.querySelectorAll('#audit-table tr'));
-    const csvContent = rows.map(row => 
-        Array.from(row.cells).map(cell => `"${cell.innerText.replace(/"/g, '""')}"`).join(',')
-    ).join('\n');
+{% if total_pages > 1 %}
+<nav aria-label="Audit log pagination" style="margin-top: 2rem; display: flex; justify-content: center; align-items: center; gap: 1rem;">
+    <!-- Previous button -->
+    {% if has_prev %}
+        <a href="/logs?page={{ page - 1 }}&limit={{ limit }}&action_filter={{ action_filter }}&source_filter={{ source_filter }}&date_from={{ date_from }}&date_to={{ date_to }}" 
+           class="btn btn-secondary"
+           style="padding: 0.5rem 1rem;">
+            <i data-lucide="chevron-left" style="width: 16px; height: 16px;"></i>
+            Previous
+        </a>
+    {% else %}
+        <button class="btn btn-secondary" disabled style="padding: 0.5rem 1rem; opacity: 0.5;">
+            <i data-lucide="chevron-left" style="width: 16px; height: 16px;"></i>
+            Previous
+        </button>
+    {% endif %}
     
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.setAttribute('href', url);
-    a.setAttribute('download', `dredge_audit_${new Date().toISOString().split('T')[0]}.csv`);
-    a.click();
+    <!-- Page info -->
+    <span style="color: var(--text-muted);">
+        Page {{ page }} of {{ total_pages }} ({{ total_count }} total)
+    </span>
+    
+    <!-- Next button -->
+    {% if has_next %}
+        <a href="/logs?page={{ page + 1 }}&limit={{ limit }}&action_filter={{ action_filter }}&source_filter={{ source_filter }}&date_from={{ date_from }}&date_to={{ date_to }}"
+           class="btn btn-secondary"
+           style="padding: 0.5rem 1rem;">
+            Next
+            <i data-lucide="chevron-right" style="width: 16px; height: 16px;"></i>
+        </a>
+    {% else %}
+        <button class="btn btn-secondary" disabled style="padding: 0.5rem 1rem; opacity: 0.5;">
+            Next
+            <i data-lucide="chevron-right" style="width: 16px; height: 16px;"></i>
+        </button>
+    {% endif %}
+</nav>
+
+<!-- Page size selector -->
+<div style="margin-top: 1rem; text-align: center;">
+    <label style="color: var(--text-muted); font-size: 0.9rem;">
+        Items per page:
+        <select onchange="updatePageSize(this.value)"
+                style="margin-left: 0.5rem; padding: 0.25rem;">
+            <option value="25" {% if limit == 25 %}selected{% endif %}>25</option>
+            <option value="50" {% if limit == 50 %}selected{% endif %}>50</option>
+            <option value="100" {% if limit == 100 %}selected{% endif %}>100</option>
+            <option value="200" {% if limit == 200 %}selected{% endif %}>200</option>
+        </select>
+    </label>
+</div>
+{% endif %}
+
+<script>
+function updatePageSize(newLimit) {
+    const params = new URLSearchParams(window.location.search);
+    params.set('limit', newLimit);
+    params.set('page', '1');
+    window.location.href = '/logs?' + params.toString();
+}
+
+function exportLogs() {
+    // Get current filters from URL
+    const params = new URLSearchParams(window.location.search);
+    
+    // Build export URL with filters
+    const exportUrl = '/logs/export?' + params.toString();
+    
+    // Trigger download
+    window.location.href = exportUrl;
 }
 </script>
 {% endblock %}
