@@ -77,3 +77,4 @@ docs/.vitepress/cache
 
 # Node
 node_modules/
+.secret.key
