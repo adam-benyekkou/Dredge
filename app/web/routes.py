@@ -67,15 +67,20 @@ async def dashboard(request: Request, session: Session = Depends(get_session)):
         images = all_images
         volumes = all_volumes
         
-        # DEBUG: Add fake volumes and waste for visualization if they are empty
-        if not volumes:
+        # DEBUG: Add fake volumes and waste for visualization if they are empty or all 0 size
+        if not volumes or sum(v.size_bytes for v in volumes) == 0:
             from app.models import VolumeArtifact, VolumeStatus
-            volumes.append(VolumeArtifact(name="fake-db-data", driver="local", size_bytes=1024**3 * 0.45, source="Local", status=VolumeStatus.ACTIVE))
-            volumes.append(VolumeArtifact(name="fake-logs-vol", driver="local", size_bytes=1024**3 * 0.12, source="Local", status=VolumeStatus.DANGLING))
+            if not volumes:
+                volumes.append(VolumeArtifact(name="fake-db-data", driver="local", size_bytes=1024**3 * 0.45, source="Local", status=VolumeStatus.ACTIVE))
+                volumes.append(VolumeArtifact(name="fake-logs-vol", driver="local", size_bytes=1024**3 * 0.12, source="Local", status=VolumeStatus.DANGLING))
+            else:
+                # Give existing volumes some fake size for visualization
+                for i, v in enumerate(volumes):
+                    v.size_bytes = 1024**3 * (0.2 + (i * 0.1))
             
         # Ensure some waste exists for visualization
-        has_waste = any(not img.tags or img.tags == ["<none>:<none>"] or any("<none>" in t for t in img.tags) for img in images)
-        if not has_waste and images:
+        waste_sum = sum(img.size_bytes for img in images if not img.tags or img.tags == ["<none>:<none>"] or any("<none>" in t for t in img.tags))
+        if waste_sum == 0 and images:
             from app.models import ImageArtifact
             images.append(ImageArtifact(tags=["<none>:<none>"], size_bytes=1024**3 * 0.28, digest="sha256:fake-waste", source="Local"))
 
@@ -875,15 +880,20 @@ async def scan_dashboard(request: Request, response: Response, session: Session 
         images = all_images
         volumes = all_volumes
         
-        # DEBUG: Add fake volumes and waste for visualization if they are empty
-        if not volumes:
+        # DEBUG: Add fake volumes and waste for visualization if they are empty or all 0 size
+        if not volumes or sum(v.size_bytes for v in volumes) == 0:
             from app.models import VolumeArtifact, VolumeStatus
-            volumes.append(VolumeArtifact(name="fake-db-data", driver="local", size_bytes=1024**3 * 0.45, source="Local", status=VolumeStatus.ACTIVE))
-            volumes.append(VolumeArtifact(name="fake-logs-vol", driver="local", size_bytes=1024**3 * 0.12, source="Local", status=VolumeStatus.DANGLING))
+            if not volumes:
+                volumes.append(VolumeArtifact(name="fake-db-data", driver="local", size_bytes=1024**3 * 0.45, source="Local", status=VolumeStatus.ACTIVE))
+                volumes.append(VolumeArtifact(name="fake-logs-vol", driver="local", size_bytes=1024**3 * 0.12, source="Local", status=VolumeStatus.DANGLING))
+            else:
+                # Give existing volumes some fake size for visualization
+                for i, v in enumerate(volumes):
+                    v.size_bytes = 1024**3 * (0.2 + (i * 0.1))
             
         # Ensure some waste exists for visualization
-        has_waste = any(not img.tags or img.tags == ["<none>:<none>"] or any("<none>" in t for t in img.tags) for img in images)
-        if not has_waste and images:
+        waste_sum = sum(img.size_bytes for img in images if not img.tags or img.tags == ["<none>:<none>"] or any("<none>" in t for t in img.tags))
+        if waste_sum == 0 and images:
             from app.models import ImageArtifact
             images.append(ImageArtifact(tags=["<none>:<none>"], size_bytes=1024**3 * 0.28, digest="sha256:fake-waste", source="Local"))
 

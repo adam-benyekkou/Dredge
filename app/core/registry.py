@@ -8,6 +8,8 @@ from datetime import datetime
 import re
 import logging
 import requests
+from urllib3.util.retry import Retry
+from requests.adapters import HTTPAdapter
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 
@@ -27,6 +29,20 @@ from datetime import datetime, timedelta
 # Simple global cache for image listings to prevent redundant API calls during filtering
 _IMAGE_CACHE: Dict[str, Tuple[List[ImageArtifact], datetime]] = {}
 _CACHE_TTL = timedelta(minutes=5)
+
+def create_resilient_session() -> requests.Session:
+    """Create a requests session with exponential backoff retries."""
+    session = requests.Session()
+    retry_strategy = Retry(
+        total=3,
+        backoff_factor=1,  # 1s, 2s, 4s
+        status_forcelist=[429, 500, 502, 503, 504],
+        allowed_methods=["HEAD", "GET", "OPTIONS", "DELETE"]
+    )
+    adapter = HTTPAdapter(max_retries=retry_strategy)
+    session.mount("https://", adapter)
+    session.mount("http://", adapter)
+    return session
 
 def get_cached_images(key: str) -> Optional[List[ImageArtifact]]:
     """Retrieve images from cache if not expired"""
@@ -217,74 +233,24 @@ class LocalDockerClient(BaseRegistryClient):
         dry_run: bool = True,
         force: bool = False
     ) -> dict:
-        """Delete a Docker image with audit logging and dry-run support.
-        
-        Performs permanent deletion of a Docker image from the local daemon.
-        Records all deletions in the audit log for compliance and cost tracking.
-        
-        Security features:
-        - Input validation for image_id format (prevents injection)
-        - Dry-run mode by default (prevents accidental deletion)
-        - Audit trail for all operations
-        - Force flag required for images with dependent children
-        
-        Args:
-            session: Database session for audit log persistence
-            image_id: Image digest or tag (e.g., 'sha256:abc123...' or 'nginx:latest')
-            dry_run: If True, simulates deletion without actually removing (default: True)
-            force: If True, removes image even if it has dependent children (default: False)
-        
-        Returns:
-            Dictionary with deletion results:
-            {
-                "success": bool,
-                "image_id": str,
-                "image_tags": List[str],
-                "bytes_freed": int,
-                "savings_usd": float,
-                "dry_run": bool,
-                "message": str
-            }
-        
-        Raises:
-            ValueError: If image_id is empty or has invalid format
-            RuntimeError: If Docker API call fails
-            
-        Example:
-            >>> from sqlmodel import Session, create_engine
-            >>> engine = create_engine("sqlite:///dredge.db")
-            >>> with Session(engine) as session:
-            ...     client = LocalDockerClient()
-            ...     # Dry run first
-            ...     result = client.delete_image(session, "sha256:abc123...", dry_run=True)
-            ...     print(f"Would free: {result['bytes_freed']} bytes")
-            ...     # Real deletion
-            ...     result = client.delete_image(session, "sha256:abc123...", dry_run=False)
-            ...     session.commit()
-        """
-        # INPUT VALIDATION: Prevent empty or whitespace-only IDs
+        """Delete a Docker image with audit logging and dry-run support."""
         if not image_id or not image_id.strip():
             raise ValueError("image_id cannot be empty")
         
         image_id = image_id.strip()
         
-        # INPUT VALIDATION: Basic format check (sha256 digest or valid tag)
-        # If starts with sha256:, it MUST be a valid 64-char hex digest
         if image_id.startswith('sha256:'):
             if not re.match(r'^sha256:[a-f0-9]{64}$', image_id):
                 raise ValueError(f"Invalid image_id format: {image_id}")
-        # Otherwise, allow valid image tag format
         elif not re.match(r'^[\w\-\./:]+$', image_id):
             raise ValueError(f"Invalid image_id format: {image_id}")
         
         try:
-            # Get image details before deletion
             img = self.client.images.get(image_id)
             image_tags = img.tags if img.tags else [f"<none>:{img.short_id}"]
             size_bytes = img.attrs.get('Size', 0)
             actual_digest = img.id or "unknown"
             
-            # Calculate cost savings
             monthly_cost = CostCalculator.calculate_monthly_cost(size_bytes, source=img.attrs.get('Source', 'Local'))
             
             result = {
@@ -298,15 +264,12 @@ class LocalDockerClient(BaseRegistryClient):
             }
             
             if dry_run:
-                # Simulate deletion without actually removing
                 result["message"] = (
                     f"DRY RUN: Would delete image {image_tags[0]} "
                     f"({size_bytes / (1024**3):.2f} GB, ${monthly_cost:.2f}/mo savings)"
                 )
-                    logger.info(result["message"], extra={"image_id": actual_digest, "dry_run": False})
-
+                logger.info(result["message"], extra={"image_id": actual_digest, "dry_run": True})
                 
-                # Record dry-run in audit log
                 audit_entry = AuditLog(
                     action="DELETE",
                     image_id=actual_digest,
@@ -319,18 +282,15 @@ class LocalDockerClient(BaseRegistryClient):
                 session.add(audit_entry)
                 
             else:
-                # REAL DELETION
                 try:
                     self.client.images.remove(image_id, force=force)
-                    clear_image_cache() # Invalidate on change
+                    clear_image_cache()
                     result["message"] = (
                         f"Successfully deleted image {image_tags[0]} "
                         f"({size_bytes / (1024**3):.2f} GB freed, ${monthly_cost:.2f}/mo savings)"
                     )
-                logger.info(result["message"], extra={"image_id": actual_digest, "dry_run": True})
-
+                    logger.info(result["message"], extra={"image_id": actual_digest, "dry_run": False})
                     
-                    # Record real deletion in audit log
                     audit_entry = AuditLog(
                         action="DELETE",
                         image_id=actual_digest,
@@ -367,14 +327,13 @@ class LocalDockerClient(BaseRegistryClient):
                 "dry_run": dry_run,
                 "message": f"Image not found: {image_id}"
             }
-            
         except APIError as e:
             logger.error(f"Docker API error during deletion: {e}")
             raise RuntimeError(f"Docker API error: {e}")
-        
         except Exception as e:
             logger.error(f"Unexpected error during deletion: {e}")
             raise RuntimeError(f"Failed to delete image: {e}")
+
 
     def list_volumes(self) -> List[VolumeArtifact]:
         """List all local Docker volumes with size information.
@@ -528,7 +487,7 @@ class DockerRegistryClient(BaseRegistryClient):
         self.endpoint = self._normalize_endpoint(config.endpoint, config.type)
         self.username = config.username
         self.password = decrypt_secret(config.password) if config.password else None
-        self.session = requests.Session()
+        self.session = create_resilient_session()
         self.token = None
         
         # Initial authentication
@@ -592,6 +551,7 @@ class DockerRegistryClient(BaseRegistryClient):
                             json={"username": self.username, "password": self.password},
                             timeout=10
                         )
+
                         
                         if login_resp.status_code == 200:
                             auth_success = True
@@ -1162,13 +1122,13 @@ class DockerRegistryClient(BaseRegistryClient):
                 # Need digest first
                 url = f"{self.endpoint}/v2/{repo_name}/manifests/{tag}"
                 headers = {"Accept": "application/vnd.docker.distribution.manifest.v2+json"}
-                head_resp = self.session.head(url, headers=headers)
+                head_resp = self.session.head(url, headers=headers, timeout=10)
                 
                 if head_resp.status_code == 200:
                     digest = head_resp.headers.get("Docker-Content-Digest")
                     if digest:
                         del_url = f"{self.endpoint}/v2/{repo_name}/manifests/{digest}"
-                        del_resp = self.session.delete(del_url)
+                        del_resp = self.session.delete(del_url, timeout=10)
                         if del_resp.status_code == 202:
                             success = True
                             clear_image_cache()
