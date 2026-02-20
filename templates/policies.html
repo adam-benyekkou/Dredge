@@ -36,8 +36,60 @@
                     <div class="toggle-track">
                         <div class="toggle-thumb"></div>
                     </div>
-                    <span class="toggle-label">Enable automated scans (Daily)</span>
+                    <span class="toggle-label">Enable automated scans</span>
                 </label>
+
+                <!-- Scheduling Section -->
+                <div class="form-group" style="margin-top: 2rem;">
+                    <label class="toggle-pill" style="cursor: pointer; display: flex; align-items: center;">
+                        <input type="checkbox" name="schedule_enabled" id="schedule-enabled"
+                               onchange="toggleScheduleFields()"
+                               {% if policy.schedule_enabled %}checked{% endif %}>
+                        <div class="toggle-track">
+                            <div class="toggle-thumb"></div>
+                        </div>
+                        <span class="toggle-label">Enable Scheduled Execution</span>
+                    </label>
+                    <p style="color: var(--text-muted); font-size: 0.85rem; margin-top: 0.5rem; margin-left: 3.5rem;">
+                        Automatically run this policy on a cron schedule.
+                    </p>
+                </div>
+                
+                <div id="schedule-fields" style="display: {% if policy.schedule_enabled %}block{% else %}none{% endif %}; margin-top: 1.5rem; padding: 1.5rem; background: var(--bg-depth); border-radius: 8px; border: 1px solid var(--border-subtle);">
+                    <div class="form-group">
+                        <label for="schedule_cron">Schedule (Cron Expression)</label>
+                        <input type="text" 
+                               name="schedule_cron" 
+                               id="schedule_cron" 
+                               value="{{ policy.schedule_cron if policy.schedule_cron else '' }}"
+                               placeholder="0 2 * * *"
+                               style="font-family: var(--font-mono); margin-bottom: 0.5rem;">
+                        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1rem;">
+                            <button type="button" class="ghost" onclick="setSchedule('0 2 * * *')" style="font-size: 0.75rem; padding: 0.25rem 0.75rem;">Daily 2am</button>
+                            <button type="button" class="ghost" onclick="setSchedule('0 0 * * 0')" style="font-size: 0.75rem; padding: 0.25rem 0.75rem;">Weekly Sun</button>
+                            <button type="button" class="ghost" onclick="setSchedule('0 0 1 * *')" style="font-size: 0.75rem; padding: 0.25rem 0.75rem;">Monthly 1st</button>
+                            <button type="button" class="ghost" onclick="setSchedule('*/30 * * * *')" style="font-size: 0.75rem; padding: 0.25rem 0.75rem;">Every 30m</button>
+                        </div>
+                        <small style="color: var(--text-muted); display: block;">
+                            Standard crontab format: <code>minute hour day month day-of-week</code>
+                        </small>
+                    </div>
+                    
+                    {% if policy.next_run %}
+                    <div style="margin-top: 1.5rem; padding: 1rem; background: rgba(0, 119, 182, 0.1); border-left: 3px solid var(--primary); border-radius: 4px;">
+                        <div style="display: flex; align-items: center; gap: 0.75rem; font-size: 0.9rem;">
+                            <i data-lucide="clock" style="width: 16px; height: 16px; color: var(--primary);"></i>
+                            <span><strong>Next Scheduled Run:</strong> {{ policy.next_run.strftime('%Y-%m-%d %H:%M:%S') }} UTC</span>
+                        </div>
+                        {% if policy.last_run %}
+                        <div style="margin-top: 0.5rem; display: flex; align-items: center; gap: 0.75rem; font-size: 0.85rem; color: var(--text-muted);">
+                            <i data-lucide="history" style="width: 16px; height: 16px;"></i>
+                            <span>Last Run: {{ policy.last_run.strftime('%Y-%m-%d %H:%M:%S') }} (Total: {{ policy.run_count }})</span>
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                </div>
 
                 <footer style="margin-top: 2rem; border-top: 1px solid var(--border-subtle); padding-top: 1rem; display: flex; justify-content: space-between; align-items: center;">
                     <button type="submit" class="primary">Update Policy</button>
@@ -86,6 +138,16 @@
 </div>
 
 <script>
+function toggleScheduleFields() {
+    const checkbox = document.getElementById('schedule-enabled');
+    const fields = document.getElementById('schedule-fields');
+    fields.style.display = checkbox.checked ? 'block' : 'none';
+}
+
+function setSchedule(cron) {
+    document.getElementById('schedule_cron').value = cron;
+}
+
 function testPolicy(val) {
     const outputSpan = document.getElementById('cli-output');
     const previewSpan = document.getElementById('cli-tag-preview');

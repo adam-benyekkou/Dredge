@@ -118,6 +118,13 @@ class CleanupPolicy(SQLModel, table=True):
     regex_whitelist: str = Field(default="", max_length=500)
     enabled: bool = Field(default=True)
     created_at: datetime = Field(default_factory=datetime.utcnow)
+    
+    # Scheduling fields
+    schedule_enabled: bool = Field(default=False)  # Whether to run on schedule
+    schedule_cron: Optional[str] = Field(default=None, max_length=100)  # Cron expression
+    next_run: Optional[datetime] = Field(default=None)  # Next scheduled run time
+    last_run: Optional[datetime] = Field(default=None)  # Last execution time
+    run_count: int = Field(default=0)  # Total number of executions
 
 
 class AuditLog(SQLModel, table=True):

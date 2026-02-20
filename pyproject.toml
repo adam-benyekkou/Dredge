@@ -21,6 +21,7 @@ dependencies = [
     "cryptography",
     "python-jose[cryptography]",
     "passlib[bcrypt]",
+    "apscheduler",
 ]
 
 [project.optional-dependencies]

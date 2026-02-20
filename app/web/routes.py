@@ -17,6 +17,7 @@ from app.core.finops import CostCalculator
 from app.core.db import get_session
 from app.core.notify import send_notification
 from app.models import ImageStatus, AuditLog, RegistryConfig, RegistryType, AppSettings, CleanupPolicy, ImageArtifact
+from app.core.scheduler import schedule_policy, unschedule_policy
 
 router = APIRouter()
 templates = Jinja2Templates(directory="templates")
@@ -192,24 +193,75 @@ async def policies_view(request: Request, session: Session = Depends(get_session
 @router.post("/policies", response_class=HTMLResponse)
 async def update_policy(request: Request, session: Session = Depends(get_session)):
     """Update cleanup policy"""
-    form_data = await request.form()
-    statement = select(CleanupPolicy).limit(1)
-    policy = session.exec(statement).first()
-    
-    if policy:
-        policy.keep_count = int(form_data.get("keep_count", 3))
-        policy.max_age_days = int(form_data.get("max_age_days", 30))
-        policy.regex_whitelist = str(form_data.get("regex_whitelist", ""))
-        policy.enabled = form_data.get("enabled") == "on"
+    try:
+        form_data = await request.form()
+        statement = select(CleanupPolicy).limit(1)
+        policy = session.exec(statement).first()
         
-        session.add(policy)
+        # New scheduling fields
+        schedule_enabled = form_data.get("schedule_enabled") == "on"
+        schedule_cron = form_data.get("schedule_cron", "").strip()
+        
+        if policy:
+            policy.keep_count = int(form_data.get("keep_count", 3))
+            policy.max_age_days = int(form_data.get("max_age_days", 30))
+            policy.regex_whitelist = str(form_data.get("regex_whitelist", ""))
+            policy.enabled = form_data.get("enabled") == "on"
+            
+            # Update scheduling
+            policy.schedule_enabled = schedule_enabled
+            policy.schedule_cron = schedule_cron if schedule_cron else None
+            
+            session.add(policy)
+            session.commit()
+            session.refresh(policy)
+            
+            # Apply scheduling change
+            if policy.schedule_enabled and policy.schedule_cron:
+                schedule_policy(policy)
+            else:
+                unschedule_policy(policy.id)
+                
+        return templates.TemplateResponse(
+            request,
+            "policies.html",
+            {"policy": policy, "updated": True}
+        )
+    except Exception as e:
+        logger.error(f"Failed to update policy: {e}", exc_info=True)
+        return templates.TemplateResponse(
+            request,
+            "policies.html",
+            {"policy": None, "error": str(e)}
+        )
+
+
+@router.delete("/policies/{policy_id}")
+async def delete_policy(policy_id: int, session: Session = Depends(get_session)):
+    """Delete a cleanup policy"""
+    try:
+        policy = session.get(CleanupPolicy, policy_id)
+        
+        if not policy:
+            return HTMLResponse(content="Policy not found", status_code=404)
+        
+        # Unschedule before deleting
+        unschedule_policy(policy_id)
+        
+        session.delete(policy)
         session.commit()
         
-    return templates.TemplateResponse(
-        request,
-        "policies.html",
-        {"policy": policy, "updated": True}
-    )
+        return HTMLResponse(
+            content="",
+            headers={"HX-Trigger": '{"showMessage": {"message": "Policy deleted", "type": "success"}}'}
+        )
+    except Exception as e:
+        logger.error(f"Failed to delete policy: {e}", exc_info=True)
+        return HTMLResponse(
+            content="",
+            status_code=500,
+            headers={"HX-Trigger": f'{{"showMessage": {{"message": "Error: {str(e)}", "type": "error"}}}}'}
+        )
 
 
 @router.get("/logs", response_class=HTMLResponse)

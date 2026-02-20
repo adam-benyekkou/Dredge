@@ -187,9 +187,18 @@ async def startup_event():
     logging.info("Dredge application starting...")
     init_db()
     logging.info("Database initialized.")
+    
+    # Start policy scheduler
+    from app.core.scheduler import start_scheduler
+    start_scheduler()
+    logging.info("Policy scheduler initialized.")
 
 
 @app.on_event("shutdown")
 async def shutdown_event():
     """Application shutdown tasks"""
     logging.info("Dredge application shutting down...")
+    
+    # Shutdown scheduler gracefully
+    from app.core.scheduler import shutdown_scheduler
+    shutdown_scheduler()
