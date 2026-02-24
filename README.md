@@ -10,7 +10,7 @@ A powerful, nautical-themed platform for managing Docker infrastructure costs an
 [![Python](https://img.shields.io/badge/Python-3.11-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 
-[🚀 Live Demo](https://dredge-demo.cavydev.com/) • [📖 Documentation](https://adam-benyekkou.github.io/Dredge/) • [Quick Start](#quick-start)
+[Live Demo](https://dredge-demo.cavydev.com/) • [📖 Documentation](https://adam-benyekkou.github.io/Dredge/) • [Quick Start](#quick-start)
 
 </div>
 
