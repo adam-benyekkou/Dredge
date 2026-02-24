@@ -24,6 +24,13 @@ A powerful, nautical-themed platform for managing Docker infrastructure costs an
 - **Optimization** - Automated cleanup policies, bloat detection, and efficiency scoring.
 - **Safety** - Quarantine-first workflow with preview modals and 24-hour grace periods.
 
+## Tech Stack
+
+- **Backend:** Python 3.11 • FastAPI • SQLModel • Docker SDK
+- **Frontend:** HTMX • Jinja2 • Custom CSS (Deep Harbor theme)
+- **Infrastructure:** Docker • Docker Compose • SQLite
+- **Auth:** JWT (python-jose) • PBKDF2-SHA256 hashing
+
 ## Quick Start
 
 ```bash
