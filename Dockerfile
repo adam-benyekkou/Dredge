@@ -10,7 +10,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Copy dependency specification
 COPY pyproject.toml ./
-
+# Stub the app package so pip can resolve metadata without the full source.
+# The real source is copied in the runtime stage.
+RUN mkdir -p app && touch app/__init__.py
 # Install dependencies into a local directory
 RUN pip install --no-cache-dir --prefix=/install . cryptography
 
