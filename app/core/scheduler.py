@@ -17,11 +17,14 @@ from app.core.analytics import capture_daily_snapshot
 
 import sys
 import os
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
-try:
-    from scripts.seed_fake_data import main as seed_db_main
-except ImportError:
-    seed_db_main = None
+import shutil
+
+# Paths for demo snapshot restore
+_HERE = os.path.dirname(os.path.abspath(__file__))
+SNAPSHOT_PATH = os.path.abspath(os.path.join(_HERE, '../../scripts/demo_snapshot.db'))
+DB_PATH = os.path.abspath(os.path.join(_HERE, '../../dredge.db'))
+
+HAS_SNAPSHOT = os.path.exists(SNAPSHOT_PATH)
 logger = logging.getLogger(__name__)
 
 # Global scheduler instance
@@ -179,8 +182,8 @@ def start_scheduler():
             replace_existing=True
         )
 
-        # Demo specific: DB reset every 12 hours
-        if seed_db_main:
+        # Demo specific: DB reset every 12 hours (snapshot restore)
+        if HAS_SNAPSHOT:
             sched.add_job(
                 run_demo_db_reset,
                 trigger=CronTrigger.from_crontab('0 */12 * * *', timezone='UTC'),
@@ -208,14 +211,13 @@ async def run_daily_snapshot():
 
 
 async def run_demo_db_reset():
-    """Reset the database for the demo environment"""
+    """Restore the database from the demo snapshot"""
     try:
-        logger.info("Running demo DB reset...")
-        if seed_db_main:
-            seed_db_main()
-            logger.info("Demo DB reset complete.")
+        logger.info("Restoring demo DB from snapshot...")
+        shutil.copy(SNAPSHOT_PATH, DB_PATH)
+        logger.info("Demo DB restored from snapshot.")
     except Exception as e:
-        logger.error(f"Failed to reset demo DB: {e}", exc_info=True)
+        logger.error(f"Failed to restore demo DB snapshot: {e}", exc_info=True)
 
 def shutdown_scheduler():
     """Shutdown the scheduler (call on app shutdown)"""

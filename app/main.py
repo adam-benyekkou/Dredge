@@ -108,10 +108,16 @@ async def health_check():
 async def startup_event():
     """Application startup tasks"""
     logging.info("Dredge application starting...")
+    # Demo mode: restore DB from snapshot before init so we always start clean
+    import os, shutil
+    _here = os.path.dirname(os.path.abspath(__file__))
+    snapshot = os.path.abspath(os.path.join(_here, '../scripts/demo_snapshot.db'))
+    db_path = os.path.abspath(os.path.join(_here, '../dredge.db'))
+    if os.path.exists(snapshot):
+        shutil.copy(snapshot, db_path)
+        logging.info("Demo DB restored from snapshot on startup.")
     init_db()
     logging.info("Database initialized.")
-    
-    # Start policy scheduler
     from app.core.scheduler import start_scheduler
     start_scheduler()
     logging.info("Policy scheduler initialized.")

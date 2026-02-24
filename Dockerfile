@@ -34,6 +34,7 @@ COPY --from=builder /install /usr/local
 COPY app ./app
 COPY templates ./templates
 COPY static ./static
+COPY scripts/demo_snapshot.db ./scripts/demo_snapshot.db
 
 # Ensure the non-root user owns the application directory
 # This is required for the SQLite database (dredge.db)
