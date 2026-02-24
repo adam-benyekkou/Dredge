@@ -2,6 +2,8 @@
 
 Dredge acts as a centralized FinOps dashboard for all your container registries. By configuring remote sources, you can visualize costs and manage lifecycles across your entire infrastructure.
 
+![Registries Overview](../assets/screenshots/registries.png)
+
 ## Supported Providers
 
 Dredge supports the following providers out of the box:
@@ -15,6 +17,12 @@ Dredge supports the following providers out of the box:
 | **GitHub Container Registry** | `GHCR` | Username + PAT |
 | **Google Container Registry** | `GCR` | Service Account JSON |
 | **Custom / Self-Hosted** | `CUSTOM` | Basic Auth |
+
+## Adding a Registry
+
+![Add Registry Modal](../assets/screenshots/add_registries_modal.png)
+
+To add a new registry, navigate to the **Registries** page and click the **"Add Registry"** button. Select your provider and enter the required credentials.
 
 ## How Scanning Works
 

@@ -2,6 +2,8 @@
 
 The Quarantine page is a dedicated interface for managing images that have been flagged by cleanup policies. It provides a safe, reviewable workflow before permanent deletion.
 
+![Quarantine Management](../assets/screenshots/quarantine.png)
+
 ## Overview
 
 When cleanup policies run, matching images are not deleted immediately. Instead, they are moved to a **QUARANTINED** state where you can review, restore, or permanently purge them.

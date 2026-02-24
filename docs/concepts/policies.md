@@ -2,6 +2,8 @@
 
 Dredge allows you to automate image management by defining lifecycle rules. Policies help you maintain a clean registry and keep storage costs under control.
 
+![Cleanup Policies](../assets/screenshots/policies.png)
+
 ## Rule Types
 
 *   **Keep Count**: Ensure the last $N$ tags are always kept per repository (e.g., keep last 5 deployments).
