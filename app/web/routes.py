@@ -247,59 +247,16 @@ async def volumes_view(request: Request, session: Session = Depends(get_session)
 
 @router.delete("/volumes/batch", response_class=HTMLResponse)
 async def batch_delete_volumes(request: Request, session: Session = Depends(get_session)):
-    """Batch delete selected volumes"""
+    """Batch delete selected volumes (Mocked for Demo)"""
     try:
         form_data = await request.form()
         selected = form_data.getlist("selected_volumes")
-        
         if not selected:
             response = HTMLResponse(content="")
             response.headers["HX-Trigger"] = '{"showMessage": {"message": "No volumes selected", "type": "error"}}'
             return response
-            
-        success_count = 0
-        fail_count = 0
-        client = RegistryClientFactory.get_client()
-        
-        for name in selected:
-            try:
-                result = client.delete_volume(session, name)
-                if result["success"]:
-                    success_count += 1
-                else:
-                    fail_count += 1
-            except Exception as e:
-                logger.error(f"Error deleting volume {name}: {e}")
-                fail_count += 1
-        
-        session.commit()
-        
-        msg = f"Purged {success_count} volumes."
-        if fail_count > 0:
-            msg += f" {fail_count} failed."
-            
-        # Return updated table (reload current source)
-        source_filter = request.query_params.get("source", "All")
-        
-        # Local volumes (Re-fetch)
-        volumes = []
-        try:
-            volumes = client.list_volumes()
-        except:
-            volumes = session.exec(select(VolumeArtifact)).all()
-            
-        if source_filter != "All":
-            volumes = [v for v in volumes if v.source == source_filter]
-            
-        settings = session.get(AppSettings, 1)
-        
-        # We need to return the full table content since hx-target is #volume-table
-        # Instead of duplicating volumes.html logic, we return a partial if possible, 
-        # but volumes.html doesn't have a partial for the table.
-        # For simplicity, I'll return a trigger to reload the page or just a 204 with a message.
-        
-        # Let's try returning a 204 with a reload trigger for now as it's cleaner than duplicating HTML logic
-        response = Response(status_code=204)
+        msg = f"Action simulated in Demo Mode: Purged {len(selected)} volumes."
+        response = HTMLResponse(content="")
         response.headers["HX-Trigger"] = f'{{"showMessage": {{"message": "{msg}", "type": "success"}}, "refreshVolumes": true}}'
         return response
         
@@ -313,25 +270,10 @@ async def batch_delete_volumes(request: Request, session: Session = Depends(get_
 
 @router.delete("/volumes/{name}", response_class=HTMLResponse)
 async def delete_volume(name: str, session: Session = Depends(get_session)):
-    """Delete a Docker volume"""
-    try:
-        client = RegistryClientFactory.get_client()
-        result = client.delete_volume(session, name)
-        
-        if result["success"]:
-            session.commit()
-            return HTMLResponse(content="")
-        else:
-            return HTMLResponse(
-                content=f'<tr class="error-row"><td colspan="7" style="color: var(--danger);">{result["message"]}</td></tr>',
-                status_code=200
-            )
-    except Exception as e:
-        logger.error(f"Volume deletion failed: {str(e)}", exc_info=True)
-        return HTMLResponse(
-            content=f'<tr class="error-row"><td colspan="7" style="color: var(--danger);">Deletion failed: {escape(str(e))}</td></tr>',
-            status_code=500
-        )
+    """Delete a Docker volume (Mocked for Demo)"""
+    response = HTMLResponse(content="")
+    response.headers["HX-Trigger"] = '{"showMessage": {"message": "Action simulated in Demo Mode: Volume purged", "type": "success"}}'
+    return response
 
 
 @router.get("/policies", response_class=HTMLResponse)
@@ -625,63 +567,11 @@ from app.core.security import encrypt_secret
 
 @router.post("/registries/test", response_class=HTMLResponse)
 async def test_registry_connection(request: Request, session: Session = Depends(get_session)):
-    """Test connection to a registry before saving"""
-    try:
-        form_data = await request.form()
-        
-        name = str(form_data.get("name", "Test Registry")).strip()
-        reg_type = str(form_data.get("type", "DOCKERHUB"))
-        endpoint = str(form_data.get("endpoint", "")).strip()
-        username = str(form_data.get("username", "")).strip() or None
-        password = str(form_data.get("password", "")).strip() or None
-        
-        # Check if we are testing an existing registry (reg_id in form)
-        # We need to add a hidden input for reg_id in the edit form for this to work
-        reg_id = form_data.get("reg_id")
-        
-        # Logic: If password is empty AND we have a reg_id, fetch existing password from DB
-        encrypted_password = None
-        if password:
-            encrypted_password = encrypt_secret(password)
-        elif reg_id:
-            # Try to fetch existing password
-            existing_reg = session.get(RegistryConfig, int(reg_id))
-            if existing_reg and existing_reg.password:
-                encrypted_password = existing_reg.password
-        
-        # Create a temporary config object
-        temp_config = RegistryConfig(
-            name=name,
-            type=RegistryType(reg_type),
-            endpoint=endpoint,
-            username=username,
-            password=encrypted_password
-        )
-        
-        # Instantiate client and test
-        client = RegistryClientFactory.get_client(temp_config)
-        result = client.test_connection()
-        
-        icon = "check-circle" if result["success"] else "x-circle"
-        color = "var(--primary)" if result["success"] else "var(--danger)"
-        
-        return f"""
-        <div class="connection-result" style="margin-top: 1rem; padding: 0.75rem; border-radius: 4px; background-color: rgba(0,0,0,0.2); border: 1px solid {color}; display: flex; align-items: center; gap: 0.5rem;">
-            <i data-lucide="{icon}" style="color: {color}; width: 18px;"></i>
-            <span style="font-size: 0.9rem; color: var(--text-main);">{result['message']}</span>
-        </div>
-        <script>lucide.createIcons();</script>
-        """
-        
-    except Exception as e:
-        return f"""
-        <div class="connection-result" style="margin-top: 1rem; padding: 0.75rem; border-radius: 4px; background-color: rgba(231, 76, 60, 0.1); border: 1px solid var(--danger); color: var(--danger);">
-            <i data-lucide="alert-circle" style="vertical-align: middle; margin-right: 0.5rem;"></i>
-            Error: {str(e)}
-        </div>
-        <script>lucide.createIcons();</script>
-        """
-
+    """Test connection to a registry (Mocked for Demo)"""
+    return HTMLResponse(
+        content='<div class="alert success">Connection successful (Demo Mode)</div>',
+        headers={"HX-Trigger": '{"showMessage": {"message": "Connection Successful", "type": "success"}}'}
+    )
 @router.post("/registries", response_class=HTMLResponse)
 async def add_registry(request: Request, session: Session = Depends(get_session)):
     """Add a new remote registry"""
@@ -802,14 +692,9 @@ async def update_registry(reg_id: int, request: Request, session: Session = Depe
 
 @router.delete("/registries/{reg_id}", response_class=HTMLResponse)
 async def delete_registry(reg_id: int, session: Session = Depends(get_session)):
-    """Delete a registry configuration"""
-    registry = session.get(RegistryConfig, reg_id)
-    if registry:
-        session.delete(registry)
-        session.commit()
-    
+    """Delete a registry configuration (Mocked for Demo) Surpress delete."""
     response = HTMLResponse(content="")
-    response.headers["HX-Trigger"] = '{"showMessage": {"message": "Registry Removed", "type": "info"}}'
+    response.headers["HX-Trigger"] = '{"showMessage": {"message": "Action simulated in Demo Mode: Registry Removed", "type": "info"}}'
     return response
 
 
@@ -842,52 +727,13 @@ async def update_settings(request: Request, session: Session = Depends(get_sessi
         settings = AppSettings(id=1)
         session.add(settings)
     
-    if section == "finops":
-        settings.provider_name = str(form_data.get("provider_name", "AWS"))
-        settings.currency_symbol = str(form_data.get("currency_symbol", "$"))
-        try:
-            price = float(form_data.get("custom_price_per_gb", 0.10))
-        except (ValueError, TypeError):
-            price = 0.10
-        
-        # Store price in the unified field
-        settings.custom_price_per_gb = price
-        
-        # Also populate the provider-specific field so CostCalculator works correctly
-        provider = settings.provider_name
-        if provider == "Docker Hub":
-            settings.dockerhub_price_per_gb = price
-        elif provider in ("GHCR",):
-            settings.ghcr_price_per_gb = price
-        elif provider == "GitHub HRC":
-            settings.github_hrc_price_per_gb = price
-        
-        try:
-            settings.monthly_budget = float(form_data.get("monthly_budget", 0.00))
-        except (ValueError, TypeError):
-            settings.monthly_budget = 0.00
-            
-    elif section == "notifications":
-        settings.notification_urls = str(form_data.get("notification_urls", "")).strip() or None
-        
-    elif section == "general":
-        settings.admin_username = str(form_data.get("admin_username", "admin")).strip()
-        new_password = str(form_data.get("admin_password", "")).strip()
-        if new_password:
-            from app.models import hash_password
-            settings.admin_password = hash_password(new_password)
-        
-    settings.updated_at = datetime.utcnow()
-    session.add(settings)
-    session.commit()
-    session.refresh(settings)
-        
+    # Demo Mode: Bypass save
     response = templates.TemplateResponse(
         request,
         f"partials/settings_{section}.html",
         {"settings": settings, "updated": True, "section": section}
     )
-    response.headers["HX-Trigger"] = '{"showMessage": {"message": "Settings Saved", "type": "success"}}'
+    response.headers["HX-Trigger"] = '{"showMessage": {"message": "Action simulated in Demo Mode: Settings Saved", "type": "success"}}'
     return response
 
 
@@ -949,24 +795,8 @@ async def scan_dashboard(request: Request, response: Response, session: Session 
         images = []
         volumes = []
         
-        # 1. Local Scan
-        try:
-            local_client = RegistryClientFactory.get_client()
-            # For manual scan, we bypass cache
-            images.extend(local_client.list_images(bypass_cache=True))
-            volumes.extend(local_client.list_volumes())
-        except Exception as e:
-            logger.warning(f"Local scan failed: {e}")
-        
-        # 2. Remote Scans
-        remote_configs = session.exec(select(RegistryConfig).where(RegistryConfig.is_active == True)).all()
-        for config in remote_configs:
-            try:
-                remote_client = RegistryClientFactory.get_client(config)
-                images.extend(remote_client.list_images(bypass_cache=True))
-            except Exception as e:
-                logger.warning(f"Failed to fetch from registry {config.name}: {e}")
-
+        # Demo Mode: Bypass live scans and use seeded fake data
+        pass
         # 3. Fallback to DB
         if not images:
             images = session.exec(select(ImageArtifact)).all()
@@ -1042,90 +872,11 @@ async def scan_dashboard(request: Request, response: Response, session: Session 
 
 @router.post("/scan", response_class=HTMLResponse)
 async def scan_images(request: Request, response: Response, session: Session = Depends(get_session)):
-    """Scan Docker images with pagination"""
-    try:
-        query_params = request.query_params
-        limit = int(query_params.get("limit", 20))
-        offset = int(query_params.get("offset", 0))
-        source_filter = query_params.get("source", "All")
-        refresh = query_params.get("refresh", "false").lower() == "true"
-        
-        # Get settings for cost calc
-        settings = session.get(AppSettings, 1)
-        
-        # Parallel Fetching Strategy
-        tasks = []
-        
-        # Local task
-        if source_filter == "All" or source_filter == "Local":
-            async def fetch_local():
-                try:
-                    local_client = RegistryClientFactory.get_client()
-                    # Run the synchronous list_images in a thread to keep it non-blocking
-                    return await asyncio.to_thread(local_client.list_images, limit=limit, bypass_cache=refresh)
-                except Exception as e:
-                    logger.error(f"Failed to fetch local images: {e}")
-                    return []
-            tasks.append(fetch_local())
-        
-        # Remote tasks
-        if source_filter != "Local":
-            remote_configs = session.exec(select(RegistryConfig).where(RegistryConfig.is_active == True)).all()
-            for config in remote_configs:
-                # Filter by source name if specific source selected
-                # Note: list_images returns config.name as source
-                if source_filter != "All" and config.name != source_filter:
-                    continue
-
-                async def fetch_remote(conf=config):
-                    try:
-                        remote_client = RegistryClientFactory.get_client(conf)
-                        return await asyncio.to_thread(remote_client.list_images, limit=limit, bypass_cache=refresh)
-                    except Exception as re:
-                        logger.error(f"Failed to fetch images from registry {conf.name}: {str(re)}")
-                        return []
-                tasks.append(fetch_remote())
-
-        # Execute all fetches in parallel
-        results = await asyncio.gather(*tasks)
-        
-        images = []
-        for res in results:
-            images.extend(res)
-            
-        # Fallback to DB if live scan returned nothing
-        if not images:
-            # If no specific source filter, get all. Else filter by source.
-            stmt = select(ImageArtifact)
-            if source_filter and source_filter != "All":
-                stmt = stmt.where(ImageArtifact.source == source_filter)
-            images = session.exec(stmt).all()
-        
-        # Sort combined results (newest first)
-        images.sort(key=lambda x: x.created_at or datetime.min, reverse=True)
-        
-        # Calculate total stats (approximated based on fetched)
-        total_size_bytes = sum(img.size_bytes for img in images)
-        
-        # Render Partial
-        return templates.TemplateResponse(
-            request,
-            "partials/images_table.html",
-            {
-                "images": images,
-                "settings": settings,
-                # Pass sources context if needed
-            }
-        )
-        
-    except Exception as e:
-        logger.error(f"Scan failed: {str(e)}", exc_info=True)
-        return HTMLResponse(
-            content='<p style="color: var(--danger);">Scan failed. Please check Docker daemon connection.</p>',
-            status_code=500
-        )
-
-
+    """Scan Docker images (Mocked for Demo)"""
+    return HTMLResponse(
+        content="",
+        headers={"HX-Trigger": '{"showMessage": {"message": "Scan complete (Demo Mode)", "type": "success"}, "refreshImages": true}'}
+    )
 
 @router.post("/images/{digest}/restore", response_class=HTMLResponse)
 async def restore_image(digest: str, response: Response, session: Session = Depends(get_session)):
@@ -1244,41 +995,11 @@ async def batch_delete_images(request: Request, background_tasks: BackgroundTask
             response.headers["HX-Trigger"] = '{"showMessage": {"message": "No images selected", "type": "error"}}'
             return response
             
-        # Spawn background task
-        background_tasks.add_task(process_batch_deletion, selected, None)
-        
-        # Return success immediately
-        msg = f"Deletion of {len(selected)} images started in background."
-        
-        # We cannot refresh the table accurately immediately since deletion is async.
-        # Option: Return current table (unchanged) with a message?
-        # Or remove the rows optimistically? Optimistic is risky if it fails.
-        # We will return a message and maybe trigger a delayed refresh via JS?
-        
-        # For HTMX swap, we return the same table (maybe reload it from DB to ensure consistency)
-        # But honestly, returning an empty string and letting user refresh later is safer than blocking.
-        
-        # Let's just return success message. The user will see "Deleting..." loader stop.
-        # But if we don't return HTML, the target (#image-table) will be empty!
-        
-        # We MUST return the current table state (perhaps with "Deleting..." markers?).
-        # Simplest: Return success toast, keep table as is (remove 'hx-swap="outerHTML"' from frontend if we don't want to replace?)
-        # But the frontend expects a swap.
-        
-        # We will return the current table as-is (reload local). The images will disappear on next scan/refresh.
-        # This is a trade-off for speed.
-        
-        response = HTMLResponse(content="") # No content swap? 
-        # If we return empty content and hx-swap="outerHTML", the table disappears!
-        # We should use hx-swap="none" in the response? HTMX doesn't support changing swap mode in response easily.
-        
-        # Change plan: Return a "204 No Content" which HTMX ignores?
-        # If status is 204, HTMX does not swap.
-        
+        # Demo Mode: Bypass background task
+        msg = f"Action simulated in Demo Mode: Deletion of {len(selected)} images started"
         response = Response(status_code=204)
         response.headers["HX-Trigger"] = f'{{"showMessage": {{"message": "{msg}", "type": "info"}}}}'
         return response
-        
     except Exception as e:
         logger.error(f"Batch delete failed: {e}")
         return HTMLResponse(
@@ -1312,49 +1033,9 @@ async def purge_image(digest: str, response: Response, session: Session = Depend
             if conf:
                 client = RegistryClientFactory.get_client(conf)
 
-        # 3. Execution with manual transaction control
-        # The registry deletion is an external side effect that cannot be rolled back.
-        # We perform it first. If it fails, we don't touch the DB.
-        result = client.delete_image(session, digest, dry_run=False)
-
-        if result["success"]:
-            # If the client already added an AuditLog (which it does), 
-            # we might want to update its action to 'PURGE' or just leave it.
-            # To avoid duplicates, we'll check if an audit was added or just let the client handle it.
-            # CURRENT STATE: Client adds AuditLog with 'DELETE'. 
-            # We will refactor the client to NOT add the log if we want full control here, 
-            # OR we just accept the client's log.
-            
-            # Let's ensure the DB image is removed
-            if image:
-                session.delete(image)
-            
-            # Commit the transaction (includes deletes and client-added audit logs)
-            session.commit()
-            clear_image_cache()
-
-            # Increment SRE Metrics
-            try:
-                DREDGE_SPACE_FREED_BYTES.labels(source=source, action="purge").inc(image.size_bytes if image else 0)
-            except Exception as me:
-                logger.error(f"Failed to increment metrics: {me}")
-
-            settings = session.get(AppSettings, 1)
-            symbol = settings.currency_symbol if settings else "$"
-            await send_notification(
-                title="Image Purged",
-                body=f"Successfully purged image {digest[:12]}. Savings: {symbol}{savings_usd:.2f}/mo."
-            )
-
-            response.headers["HX-Trigger"] = '{"showMessage": {"message": "Image purged successfully", "type": "success"}}'
-            return HTMLResponse(content="")
-        else:
-            logger.warning(f"Purge failed for {digest}: {result['message']}")
-            session.rollback() # Rollback any partial changes (like the audit log the client might have added)
-            return HTMLResponse(
-                content=f'<tr class="error-row"><td colspan="8" style="color: var(--danger);">{result["message"]}</td></tr>',
-                status_code=200
-            )
+        # Demo Mode: Simulate success
+        response.headers["HX-Trigger"] = '{"showMessage": {"message": "Action simulated in Demo Mode: Image purged", "type": "success"}}'
+        return HTMLResponse(content="")
 
     except Exception as e:
         session.rollback()

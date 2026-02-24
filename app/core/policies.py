@@ -70,31 +70,9 @@ class PolicyEnforcer:
         return results
 
     def _fetch_all_images(self) -> List[ImageArtifact]:
-        """Fetch unified list of images from all sources."""
-        images = []
-        
-        # Local
-        try:
-            local = RegistryClientFactory.get_client().list_images()
-            logger.info(f"PolicyEnforcer: Fetched {len(local)} local images")
-            images.extend(local)
-        except Exception as e: 
-            logger.error(f"PolicyEnforcer: Failed to fetch local images: {e}")
-            
-        # Remote
-        remote_configs = self.session.exec(select(RegistryConfig).where(RegistryConfig.is_active == True)).all()
-        logger.info(f"PolicyEnforcer: Found {len(remote_configs)} active remote registries")
-        for conf in remote_configs:
-            try:
-                client = RegistryClientFactory.get_client(conf)
-                remote_imgs = client.list_images()
-                logger.info(f"PolicyEnforcer: Fetched {len(remote_imgs)} images from {conf.name}")
-                images.extend(remote_imgs)
-            except Exception as e:
-                logger.error(f"PolicyEnforcer: Failed to fetch from {conf.name}: {e}")
-        
-        logger.info(f"PolicyEnforcer: Total images fetched: {len(images)}")
-        return images
+        """Fetch unified list of images (Mocked for Demo: DB only)."""
+        # Demo Mode: Only use images already in the DB (seeded)
+        return self.session.exec(select(ImageArtifact)).all()
 
     def _apply_policy(self, policy: CleanupPolicy, images: List[ImageArtifact], dry_run: bool = False) -> List[ImageArtifact]:
         """Apply a single policy to the image list."""

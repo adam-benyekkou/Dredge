@@ -15,6 +15,13 @@ from app.models import CleanupPolicy
 from app.core.finops import check_budget
 from app.core.analytics import capture_daily_snapshot
 
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
+try:
+    from scripts.seed_fake_data import main as seed_db_main
+except ImportError:
+    seed_db_main = None
 logger = logging.getLogger(__name__)
 
 # Global scheduler instance
@@ -172,6 +179,14 @@ def start_scheduler():
             replace_existing=True
         )
 
+        # Demo specific: DB reset every 12 hours
+        if seed_db_main:
+            sched.add_job(
+                run_demo_db_reset,
+                trigger=CronTrigger.from_crontab('0 */12 * * *', timezone='UTC'),
+                id='demo_db_reset',
+                replace_existing=True
+            )
 
 async def run_daily_budget_check():
     """Execute daily budget check"""
@@ -191,6 +206,16 @@ async def run_daily_snapshot():
     except Exception as e:
         logger.error(f"Failed to capture daily snapshot: {e}", exc_info=True)
 
+
+async def run_demo_db_reset():
+    """Reset the database for the demo environment"""
+    try:
+        logger.info("Running demo DB reset...")
+        if seed_db_main:
+            seed_db_main()
+            logger.info("Demo DB reset complete.")
+    except Exception as e:
+        logger.error(f"Failed to reset demo DB: {e}", exc_info=True)
 
 def shutdown_scheduler():
     """Shutdown the scheduler (call on app shutdown)"""

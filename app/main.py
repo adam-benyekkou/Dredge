@@ -59,96 +59,16 @@ async def http_exception_handler(request: Request, exc: HTTPException):
 
 @app.get("/auth/login", response_class=HTMLResponse)
 async def login_page(request: Request):
-    """Render the login page"""
-    # Check if already logged in
-    token = request.cookies.get("access_token")
-    if token:
-        if token.startswith("Bearer "):
-            token = token[len("Bearer "):]
-        try:
-            jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-            return RedirectResponse(url="/", status_code=302)
-        except JWTError:
-            pass
-            
-    return templates.TemplateResponse("login.html", {"request": request})
-
+    """Redirect login to dashboard for demo"""
+    return RedirectResponse(url="/", status_code=302)
 @app.post("/auth/login", response_class=HTMLResponse)
-async def login_submit(
-    request: Request,
-    response: Response,
-    username: str = Form(...),
-    password: str = Form(...),
-    session: Session = Depends(get_session)
-):
-    """Handle login form submission"""
-    settings = session.get(AppSettings, 1)
-    
-    # Default admin/admin if settings not initialized (fallback)
-    valid = False
-    if settings:
-        if username == settings.admin_username and verify_password(password, settings.admin_password):
-            valid = True
-    else:
-        # Fallback for very first run if DB empty (though init_db should handle this)
-        if username == "admin" and password == "admin":
-             valid = True
-
-    if not valid:
-        return templates.TemplateResponse(
-            "login.html", 
-            {"request": request, "error": "Invalid username or password"},
-            status_code=401
-        )
-    
-    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = create_access_token(
-        data={"sub": username}, expires_delta=access_token_expires
-    )
-    
-    # Create redirect response
-    response = RedirectResponse(url="/", status_code=303)
-    
-    # Set cookie
-    response.set_cookie(
-        key="access_token", 
-        value=f"Bearer {access_token}", 
-        httponly=True,
-        max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-        samesite="lax"
-    )
-    
-    return response
-
+async def login_submit(request: Request):
+    """Redirect login to dashboard for demo"""
+    return RedirectResponse(url="/", status_code=303)
 @app.post("/api/v1/auth/login")
-async def login_api(
-    response: Response,
-    form_data: OAuth2PasswordRequestForm = Depends(),
-    session: Session = Depends(get_session)
-):
-    settings = session.get(AppSettings, 1)
-    if not settings or form_data.username != settings.admin_username or not verify_password(form_data.password, settings.admin_password):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect username or password",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    
-    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = create_access_token(
-        data={"sub": settings.admin_username}, expires_delta=access_token_expires
-    )
-    
-    # Set cookie for UI/HTMX
-    response.set_cookie(
-        key="access_token", 
-        value=f"Bearer {access_token}", 
-        httponly=True,
-        max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-        samesite="lax"
-    )
-    
-    return {"access_token": access_token, "token_type": "bearer"}
+async def login_api():
+    """Mock API login for demo"""
+    return {"access_token": "demo_token", "token_type": "bearer"}
 
 # Mount static files for the UI
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -161,20 +81,17 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 app.include_router(
     image_router, 
     prefix="/api/v1/images", 
-    tags=["Images"],
-    dependencies=[Depends(get_current_user)]
+    tags=["Images"]
 )
 
 app.include_router(
     settings_router, 
     prefix="/api/v1/settings", 
-    tags=["Settings"],
-    dependencies=[Depends(get_current_user)]
+    tags=["Settings"]
 )
-
 # Web/UI Routes (HTMX)
-app.include_router(web_router, dependencies=[Depends(get_current_user)])
-app.include_router(quarantine_router, dependencies=[Depends(get_current_user)])
+app.include_router(web_router)
+app.include_router(quarantine_router)
 
 # Initialize Prometheus instrumentation if available
 if PROMETHEUS_ENABLED:

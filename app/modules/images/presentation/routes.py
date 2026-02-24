@@ -66,7 +66,6 @@ async def list_images(session: Session = Depends(get_session)):
 @image_router.post("/scan")
 async def trigger_scan(background_tasks: BackgroundTasks):
     """
-    Triggers an asynchronous scan of all registries.
+    Triggers an asynchronous scan of all registries (Mocked for Demo).
     """
-    # In a real implementation, this would call background_tasks.add_task(ImageService.scan_all_registries)
-    return {"status": "accepted", "message": "Background scan initiated"}
+    return {"status": "accepted", "message": "Scan simulated in Demo Mode"}
