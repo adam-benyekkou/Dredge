@@ -36,7 +36,7 @@ A powerful, nautical-themed platform for managing Docker infrastructure costs an
 - **Health Monitoring** - Automated registry health checks with proactive 5-minute pings and auto-disable for broken connections.
 - **Deep Harbor UI** - Beautiful dark nautical theme with real-time toast notifications and interactive forms.
 
-## 🛠️ Tech Stack
+## Tech Stack
 
 **Backend:** Python 3.11 • FastAPI • SQLModel • Docker SDK • JWT (python-jose)  
 **Frontend:** HTMX • Jinja2 • Custom CSS (Deep Harbor theme)  

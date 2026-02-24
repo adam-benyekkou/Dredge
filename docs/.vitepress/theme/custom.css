@@ -1,20 +1,12 @@
-/* Deep Harbor Theme Overrides */
+/* Reverted to standard VitePress theme with specific branding and zoom */
 :root {
-  --vp-c-brand: #38bdf8; /* Sky Blue */
+  --vp-c-brand: #38bdf8; /* Sky Blue Branding */
   --vp-c-brand-light: #7dd3fc;
   --vp-c-brand-dark: #0284c7;
-  --vp-c-bg: #0f172a; /* Slate 900 */
-  --vp-c-bg-alt: #1e293b; /* Slate 800 */
-  --vp-c-text-1: #e2e8f0;
-  --vp-c-text-2: #94a3b8;
-  --vp-c-divider: #334155;
-  --vp-c-gutter: #334155;
-  --vp-c-bg-soft: #1e293b;
 }
 
-/* Sidebar Logo Styling */
+/* Specific styling for the 'D' in Dredge in the navbar */
 .VPNav .title {
-    color: #e2e8f0 !important;
     font-weight: 700;
 }
 
@@ -25,32 +17,30 @@
     left: 0;
     width: 100vw;
     height: 100vh;
-    background: rgba(0, 0, 0, 0.85);
+    background: rgba(0, 0, 0, 0.9);
     z-index: 9999;
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: zoom-out;
-    backdrop-filter: blur(5px);
+    backdrop-filter: blur(4px);
 }
 .zoomed-img {
-    max-width: 90vw;
-    max-height: 90vh;
+    max-width: 95vw;
+    max-height: 95vh;
     object-fit: contain;
-    box-shadow: 0 0 40px rgba(0,0,0,0.5);
-    border-radius: 8px;
-    animation: zoomIn 0.3s ease;
+    box-shadow: 0 0 50px rgba(0,0,0,0.8);
+    border-radius: 4px;
+    animation: zoomIn 0.2s ease-out;
 }
 @keyframes zoomIn {
-    from { transform: scale(0.9); opacity: 0; }
+    from { transform: scale(0.95); opacity: 0; }
     to { transform: scale(1); opacity: 1; }
 }
-.main img {
+.vp-doc img {
     cursor: zoom-in;
-    transition: filter 0.2s;
-    border-radius: 8px;
-    border: 1px solid var(--vp-c-divider);
+    transition: opacity 0.2s;
 }
-.main img:hover {
-    filter: brightness(1.1);
+.vp-doc img:hover {
+    opacity: 0.9;
 }
