@@ -2,6 +2,7 @@ import { defineConfig } from 'vitepress'
 
 export default defineConfig({
   title: "Dredge",
+  head: [['link', { rel: 'icon', href: '/Dredge/assets/dredge_logo.png' }]],
   description: "Docker FinOps & Lifecycle Management Tool",
   base: "/Dredge/",
   ignoreDeadLinks: [
@@ -9,6 +10,7 @@ export default defineConfig({
     /^https?:\/\/localhost/,
   ],
   themeConfig: {
+    logo: '/assets/dredge_logo.png',
     nav: [
       { text: 'Home', link: '/' },
       { text: 'Guide', link: '/guide/introduction' },
@@ -32,6 +34,7 @@ export default defineConfig({
           { text: 'Cleanup Policies', link: '/concepts/policies' },
           { text: 'Quarantine Management', link: '/concepts/quarantine' },
           { text: 'FinOps Metrics', link: '/concepts/finops' },
+          { text: 'Architecture', link: '/concepts/architecture' },
         ]
       },
       {
