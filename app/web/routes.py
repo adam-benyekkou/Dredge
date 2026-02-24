@@ -872,10 +872,21 @@ async def scan_dashboard(request: Request, response: Response, session: Session 
 
 @router.post("/scan", response_class=HTMLResponse)
 async def scan_images(request: Request, response: Response, session: Session = Depends(get_session)):
-    """Scan Docker images (Mocked for Demo)"""
-    return HTMLResponse(
-        content="",
-        headers={"HX-Trigger": '{"showMessage": {"message": "Scan complete (Demo Mode)", "type": "success"}, "refreshImages": true}'}
+    """Scan images — returns DB images as table HTML for demo"""
+    source_filter = request.query_params.get("source")
+    settings = session.get(AppSettings, 1)
+
+    statement = select(ImageArtifact)
+    images = session.exec(statement).all()
+
+    if source_filter and source_filter != "All":
+        images = [img for img in images if img.source == source_filter]
+
+    response.headers["HX-Trigger"] = '{"showMessage": {"message": "Scan complete (Demo Mode)", "type": "success"}}'
+    return templates.TemplateResponse(
+        request,
+        "partials/images_table.html",
+        {"images": images, "settings": settings},
     )
 
 @router.post("/images/{digest}/restore", response_class=HTMLResponse)
