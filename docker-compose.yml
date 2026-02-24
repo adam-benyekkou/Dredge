@@ -2,6 +2,7 @@ version: '3.8'
 
 services:
   dredge:
+    image: ghcr.io/adam-benyekkou/dredge:latest
     build: .
     container_name: dredge
     # Removed user: root override to use the secure non-root user 'dredge'
