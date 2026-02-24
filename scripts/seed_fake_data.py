@@ -113,6 +113,31 @@ def create_images(session: Session, registries):
         session.add(img)
         images.append(img)
         
+    # Deterministic untagged (dangling) images — always show waste in dashboard
+    untagged_specs = [
+        ("Local",             320 * 1024**2),
+        ("Local",             510 * 1024**2),
+        ("Docker Hub Prod",   180 * 1024**2),
+        ("GHCR CI",           740 * 1024**2),
+        ("AWS ECR us-east-1", 260 * 1024**2),
+        ("Local",             90  * 1024**2),
+        ("GHCR CI",           1.1 * 1024**3),
+        ("Local",             430 * 1024**2),
+    ]
+    for idx, (src, sz) in enumerate(untagged_specs):
+        img = ImageArtifact(
+            tags=["<none>:<none>"],
+            size_bytes=int(sz),
+            created_at=base_date + timedelta(days=idx * 7),
+            digest=f"sha256:untagged{idx:056d}",
+            source=src,
+            status=ImageStatus.ACTIVE,
+            bloat_score=0,
+            bloat_issues=json.dumps(["Untagged dangling image"]),
+        )
+        session.add(img)
+        images.append(img)
+
     session.commit()
     return images
 
