@@ -48,12 +48,3 @@ Open [http://localhost:8000](http://localhost:8000) to access the dashboard. (De
 - [Security Best Practices](https://adam-benyekkou.github.io/Dredge/guide/security)
 - [Deployment Guide](https://adam-benyekkou.github.io/Dredge/deployment/production)
 
----
-
-<div align="center">
-
-**Made with ❤️ by the Dredge Team**
-
-[⬆ Back to Top](#-dredge)
-
-</div>
