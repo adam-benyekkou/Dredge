@@ -62,7 +62,22 @@ class PolicyEnforcer:
             if not dry_run and results["quarantined"] > 0:
                 from app.core.registry import clear_image_cache
                 clear_image_cache()
-                
+                # Task 3.3: Notification Summary (sync-safe)
+                from app.core.notify import send_notification
+                import asyncio as _asyncio
+                try:
+                    _asyncio.run(send_notification(
+                        title="\U0001f9f9 Cleanup Policy Run",
+                        body=f"Policy run completed. {results['quarantined']} images have been moved to quarantine."
+                    ))
+                except RuntimeError:
+                    # Already inside a running event loop — schedule as fire-and-forget
+                    loop = _asyncio.get_event_loop()
+                    loop.create_task(send_notification(
+                        title="\U0001f9f9 Cleanup Policy Run",
+                        body=f"Policy run completed. {results['quarantined']} images have been moved to quarantine."
+                    ))
+
         except Exception as e:
             logger.error(f"Policy run failed: {e}")
             results["errors"] += 1

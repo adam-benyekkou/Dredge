@@ -171,7 +171,13 @@ def start_scheduler():
             id='daily_metric_snapshot',
             replace_existing=True
         )
-
+        # Add daily metric snapshot (23:59 UTC)
+        sched.add_job(
+            ping_registries,
+            trigger=CronTrigger.from_crontab('*/5 * * * *'), # Every 5 minutes
+            id='ping_registries',
+            replace_existing=True
+        )
 
 async def run_daily_budget_check():
     """Execute daily budget check"""
@@ -182,6 +188,32 @@ async def run_daily_budget_check():
     except Exception as e:
         logger.error(f"Failed to execute budget check: {e}", exc_info=True)
 
+async def ping_registries():
+    """Background health check for all active registries"""
+    from app.core.registry import RegistryClientFactory
+    try:
+        with Session(engine) as session:
+            statement = select(RegistryConfig).where(RegistryConfig.is_active == True)
+            registries = session.exec(statement).all()
+            
+            for registry in registries:
+                try:
+                    client = RegistryClientFactory.get_client(registry)
+                    result = client.test_connection()
+                    
+                    if not result["success"]:
+                        logger.warning(f"Health check failed for {registry.name}: {result['message']}")
+                        # We don't auto-disable for network errors, only for clear Auth failures
+                        if result.get("type") == "AUTH_ERROR":
+                            logger.error(f"AUTHENTICATION FAILURE for {registry.name}. Disabling registry.")
+                            registry.is_active = False
+                            session.add(registry)
+                except Exception as e:
+                    logger.error(f"Error checking health for {registry.name}: {e}")
+            
+            session.commit()
+    except Exception as e:
+        logger.error(f"ping_registries task failed: {e}")
 
 async def run_daily_snapshot():
     """Capture daily metrics snapshot"""

@@ -139,6 +139,11 @@ async def purge_image(image_id: int, session: Session = Depends(get_session)):
         
         # Delete from registry first
         client = RegistryClientFactory.get_client()
+        if image.source != "Local":
+            remote_configs = session.exec(select(RegistryConfig).where(RegistryConfig.is_active == True)).all()
+            conf = next((c for c in remote_configs if c.name == image.source), None)
+            if conf:
+                client = RegistryClientFactory.get_client(conf)
         result = client.delete_image(session, image.digest, dry_run=False)
         
         if not result["success"]:
@@ -205,6 +210,12 @@ async def purge_bulk(
                 savings_usd = CostCalculator.calculate_monthly_cost(image.size_bytes, image.source)
                 
                 # Delete from registry
+                client = RegistryClientFactory.get_client()
+                if image.source != "Local":
+                    remote_configs = session.exec(select(RegistryConfig).where(RegistryConfig.is_active == True)).all()
+                    conf = next((c for c in remote_configs if c.name == image.source), None)
+                    if conf:
+                        client = RegistryClientFactory.get_client(conf)
                 result = client.delete_image(session, image.digest, dry_run=False)
                 
                 if result["success"]:

@@ -1,7 +1,14 @@
 """Docker Registry abstraction"""
 
 from abc import ABC, abstractmethod
-from typing import List, Optional
+from typing import List, Optional, Dict, Any, Tuple
+import boto3
+import google.auth
+from google.oauth2 import service_account
+from google.cloud import artifactregistry_v1
+from azure.identity import DefaultAzureCredential
+from azure.containerregistry import ContainerRegistryClient
+from botocore.exceptions import ClientError
 import docker
 from docker.errors import APIError, ImageNotFound, NotFound
 from datetime import datetime
@@ -13,7 +20,7 @@ from requests.adapters import HTTPAdapter
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 
-from sqlmodel import Session
+from sqlmodel import Session, select
 from app.models import ImageArtifact, AuditLog, VolumeArtifact, VolumeStatus, RegistryConfig, RegistryType
 from app.core.finops import CostCalculator
 from app.core.security import decrypt_secret
@@ -529,6 +536,51 @@ class DockerRegistryClient(BaseRegistryClient):
             logger.error(f"Authentication check failed for {self.config.name}: {e}")
 
     def test_connection(self) -> dict:
+        """Test connection to remote registry using a real API call"""
+        try:
+            # First perform generic V2 auth
+            self._authenticate()
+            
+            # Provider-specific lightweight API calls to verify auth/connectivity
+            if self.config.type == RegistryType.DOCKERHUB:
+                # Docker Hub: Check repo listing for user (using hub API)
+                hub_url = f"https://hub.docker.com/v2/repositories/{self.username}"
+                # Get hub token (handled in authenticate but let's be explicit)
+                login_resp = requests.post("https://hub.docker.com/v2/users/login", 
+                    json={"username": self.username, "password": self.password}, timeout=10)
+                if login_resp.status_code != 200:
+                    return {"success": False, "message": "Auth Failed: Invalid Hub credentials", "type": "AUTH_ERROR"}
+                
+                # Check listing
+                token = login_resp.json().get("token")
+                resp = requests.get(hub_url, headers={"Authorization": f"JWT {token}"}, params={"page_size": 1}, timeout=10)
+                if resp.status_code == 200:
+                    return {"success": True, "message": f"Connected as {self.username}"}
+                return {"success": False, "message": f"Access Denied: Could not list repos ({resp.status_code})", "type": "AUTH_ERROR"}
+
+            elif self.config.type == RegistryType.GHCR:
+                # GHCR: Check /user/packages
+                resp = self.session.get("https://api.github.com/user/packages", params={"package_type": "container"}, timeout=10)
+                if resp.status_code == 200:
+                    return {"success": True, "message": "Authenticated with GHCR (read:packages)"}
+                elif resp.status_code in [401, 403]:
+                    return {"success": False, "message": "Auth Failed: Check token scopes", "type": "AUTH_ERROR"}
+                return {"success": False, "message": f"GHCR Error: {resp.status_code}", "type": "NETWORK_ERROR"}
+            
+            # Generic V2 Check
+            resp = self.session.get(f"{self.endpoint}/v2/_catalog", params={"n": 1}, timeout=10)
+            if resp.status_code == 200:
+                return {"success": True, "message": "Connected to Registry V2 API"}
+            elif resp.status_code in [401, 403]:
+                return {"success": False, "message": "Authentication Failed (V2)", "type": "AUTH_ERROR"}
+            
+            return {"success": False, "message": f"Registry returned {resp.status_code}", "type": "NETWORK_ERROR"}
+
+        except requests.exceptions.RequestException as e:
+            return {"success": False, "message": f"Network error: {str(e)}", "type": "NETWORK_ERROR"}
+        except Exception as e:
+            return {"success": False, "message": str(e), "type": "UNKNOWN_ERROR"}
+
         """Test connection to remote registry"""
         try:
             # Force re-authentication check
@@ -1176,14 +1228,525 @@ class DockerRegistryClient(BaseRegistryClient):
 
 class RegistryClientFactory:
     """Factory for creating registry clients based on configuration"""
-    
+
     @staticmethod
     def get_client(config: Optional[RegistryConfig] = None) -> BaseRegistryClient:
         """Get the appropriate registry client.
-        
+
         If no config is provided, returns the LocalDockerClient.
         """
         if config is None:
             return LocalDockerClient()
-        
+        if config.type == RegistryType.ECR:
+            return AWSRegistryClient(config)
+        if config.type == RegistryType.GAR:
+            return GARRegistryClient(config)
+        if config.type == RegistryType.ACR:
+            return ACRRegistryClient(config)
         return DockerRegistryClient(config)
+class AWSRegistryClient(BaseRegistryClient):
+    """Client for AWS Elastic Container Registry (ECR)"""
+    
+    def __init__(self, config: RegistryConfig):
+        self.config = config
+        self.access_key = config.username
+        self.secret_key = decrypt_secret(config.password) if config.password else None
+        
+        # Parse region from endpoint or use default
+        # Endpoint example: 123456789012.dkr.ecr.us-east-1.amazonaws.com
+        self.region = "us-east-1"
+        if config.endpoint:
+            match = re.search(r'\.ecr\.([\w\-]+)\.amazonaws\.com', config.endpoint)
+            if match:
+                self.region = match.group(1)
+
+    def _get_session(self):
+        return boto3.Session(
+            aws_access_key_id=self.access_key,
+            aws_secret_access_key=self.secret_key,
+            region_name=self.region
+        )
+
+    def test_connection(self) -> dict:
+        try:
+            client = self._get_session().client('ecr')
+            client.describe_repositories(maxResults=1)
+            return {"success": True, "message": f"Connected to ECR in {self.region}"}
+        except ClientError as e:
+            return {"success": False, "message": f"AWS Auth Failed: {e.response['Error']['Message']}"}
+        except Exception as e:
+            return {"success": False, "message": f"Connection Error: {str(e)}"}
+
+    def list_images(self, limit: int = 100, bypass_cache: bool = False) -> List[ImageArtifact]:
+        cache_key = f"ecr_{self.config.id}"
+        if not bypass_cache:
+            cached = get_cached_images(cache_key)
+            if cached: return cached
+
+        artifacts = []
+        try:
+            client = self._get_session().client('ecr')
+            repos_resp = client.describe_repositories()
+            
+            for repo in repos_resp.get('repositories', []):
+                repo_name = repo['repositoryName']
+                images_resp = client.describe_images(repositoryName=repo_name)
+                
+                for img in images_resp.get('imageDetails', []):
+                    tags = [f"{repo_name}:{t}" for t in img.get('imageTags', [])]
+                    if not tags:
+                        tags = [f"{repo_name}:<none>"]
+                    
+                    # AWS ECR returns imageSizeInBytes
+                    size = img.get('imageSizeInBytes', 0)
+                    digest = img.get('imageDigest', '')
+                    created_at = img.get('imagePushedAt', datetime.utcnow())
+                    
+                    analysis = BloatAnalyzer.analyze_image(tags, size)
+                    
+                    artifacts.append(ImageArtifact(
+                        tags=tags,
+                        size_bytes=size,
+                        created_at=created_at,
+                        digest=digest,
+                        source=self.config.name,
+                        bloat_score=analysis['score'],
+                        bloat_issues=json.dumps(analysis['issues']) if analysis['issues'] else None
+                    ))
+                    
+                    if len(artifacts) >= limit:
+                        break
+                if len(artifacts) >= limit:
+                    break
+                    
+            set_cached_images(cache_key, artifacts)
+            return artifacts
+        except Exception as e:
+            logger.error(f"Failed to list ECR images: {e}")
+            return []
+
+    def get_manifest_size(self, digest: str) -> int:
+        return 0 # Size already retrieved during list
+
+    def delete_image(self, session: Session, image_id: str, dry_run: bool = True, force: bool = False) -> dict:
+        """Delete image from AWS ECR."""
+        success = False
+        message = ""
+        bytes_freed = 0
+        savings_usd = 0.0
+        repo_name = ""
+        image_identifier = {}
+        if image_id.startswith("sha256:"):
+            from app.models import ImageArtifact
+            image = session.exec(select(ImageArtifact).where(ImageArtifact.digest == image_id)).first()
+            if image and image.tags:
+                repo_name = image.tags[0].split(':')[0]
+                image_identifier = {'imageDigest': image_id}
+            else:
+                return {"success": False, "message": f"Could not find repository for digest {image_id}"}
+        elif ":" in image_id:
+            repo_name, tag = image_id.split(':', 1)
+            image_identifier = {'imageTag': tag}
+        else:
+            return {"success": False, "message": f"Invalid image identifier for ECR: {image_id}"}
+        if dry_run:
+            return {"success": True, "message": f"DRY RUN: Would delete {image_id} from {repo_name}", "dry_run": True}
+        try:
+            client = self._get_session().client('ecr')
+            resp = client.batch_delete_image(repositoryName=repo_name, imageIds=[image_identifier])
+            if resp.get('imageIds'):
+                success = True
+                message = f"Successfully deleted {image_id} from {repo_name}"
+            else:
+                failure = resp.get('failures', [{}])[0]
+                success = False
+                message = f"Failed to delete: {failure.get('failureReason', 'Unknown reason')}"
+        except Exception as e:
+            logger.error(f"ECR deletion failed: {e}")
+            message = f"AWS Error: {str(e)}"
+            success = False
+        return {"success": success, "message": message, "image_id": image_id, "bytes_freed": bytes_freed, "savings_usd": savings_usd, "dry_run": False}
+
+    def list_volumes(self) -> List[VolumeArtifact]:
+        return []
+
+    def delete_volume(self, session, name, force=False) -> dict:
+        return {"success": False, "message": "Volumes not supported for ECR"}
+class GARRegistryClient(BaseRegistryClient):
+    """Client for Google Artifact Registry (GAR)"""
+    
+    def __init__(self, config: RegistryConfig):
+        self.config = config
+        self.credentials_json = decrypt_secret(config.password) if config.password else None
+        self.project_id = config.username
+
+    def _get_client(self):
+        if not self.credentials_json:
+            raise ValueError("GAR credentials JSON missing")
+            
+        info = json.loads(self.credentials_json)
+        credentials = service_account.Credentials.from_service_account_info(info)
+        return artifactregistry_v1.ArtifactRegistryClient(credentials=credentials)
+
+    def test_connection(self) -> dict:
+        try:
+            client = self._get_client()
+            client.list_locations(name=f"projects/{self.project_id}")
+            return {"success": True, "message": "Connected to Google Artifact Registry"}
+        except Exception as e:
+            return {"success": False, "message": f"GAR Connection Failed: {str(e)}"}
+
+    def list_images(self, limit: int = 100, bypass_cache: bool = False) -> List[ImageArtifact]:
+        cache_key = f"gar_{self.config.id}"
+        if not bypass_cache:
+            cached = get_cached_images(cache_key)
+            if cached: return cached
+
+        artifacts = []
+        try:
+            client = self._get_client()
+            parent = self.config.endpoint if self.config.endpoint else f"projects/{self.project_id}/locations/us-central1/repositories/default"
+            
+            packages = client.list_packages(parent=parent)
+            for pkg in packages:
+                versions = client.list_versions(parent=pkg.name)
+                for ver in versions:
+                    pkg_name_short = pkg.name.split('/')[-1]
+                    tags = [f"{pkg_name_short}:{t}" for t in ver.related_tags]
+                    if not tags:
+                        tags = [f"{pkg_name_short}:<none>"]
+                        
+                    digest = ver.name.split('/')[-1]
+                    size = 0 
+                    created_at = ver.create_time or datetime.utcnow()
+                    
+                    analysis = BloatAnalyzer.analyze_image(tags, size)
+                    
+                    artifacts.append(ImageArtifact(
+                        tags=tags,
+                        size_bytes=size,
+                        created_at=created_at,
+                        digest=digest,
+                        source=self.config.name,
+                        bloat_score=analysis['score']
+                    ))
+                    if len(artifacts) >= limit: break
+                if len(artifacts) >= limit: break
+                
+            set_cached_images(cache_key, artifacts)
+            return artifacts
+        except Exception as e:
+            logger.error(f"GAR list failed: {e}")
+            return []
+
+    def get_manifest_size(self, digest: str) -> int:
+        return 0
+
+    def delete_image(self, session: Session, image_id: str, dry_run: bool = True, force: bool = False) -> dict:
+        if dry_run:
+            return {"success": True, "message": "DRY RUN: Would delete GAR image version", "dry_run": True}
+        try:
+            client = self._get_client()
+            client.delete_version(name=image_id)
+            return {"success": True, "message": "GAR Version deleted"}
+        except Exception as e:
+            return {"success": False, "message": f"GAR Delete Failed: {str(e)}"}
+
+    def list_volumes(self) -> List[VolumeArtifact]:
+        return []
+
+    def delete_volume(self, session, name, force=False) -> dict:
+        return {"success": False, "message": "Volumes not supported for GAR"}
+
+
+class ACRRegistryClient(BaseRegistryClient):
+    """Client for Azure Container Registry (ACR) using Docker V2 API with OAuth2 token exchange.
+
+    Supports ACR admin user credentials (username + password) by exchanging them for
+    an ACR access token, then using that token against the standard Docker V2 Registry API.
+    This avoids requiring AAD / managed identity and works with the credentials stored in
+    RegistryConfig (username = admin username, password = admin password or service-principal
+    client-secret).
+    """
+
+    def __init__(self, config: RegistryConfig):
+        self.config = config
+        # Normalize endpoint — strip scheme if present
+        endpoint = (config.endpoint or "").strip()
+        for prefix in ("https://", "http://"):
+            if endpoint.startswith(prefix):
+                endpoint = endpoint[len(prefix):]
+        self.registry = endpoint.rstrip("/")  # e.g. myregistry.azurecr.io
+        self.base_url = f"https://{self.registry}"
+        self.username = config.username
+        self.password = decrypt_secret(config.password) if config.password else None
+        self.session = create_resilient_session()
+        self._authenticate()
+
+    def _authenticate(self):
+        """Exchange admin credentials for an ACR OAuth2 access token.
+
+        ACR token endpoint accepts admin username/password via grant_type=password and
+        returns a short-lived access_token that is used as a Bearer token for V2 API calls.
+        Falls back to HTTP Basic auth if the token exchange fails.
+        """
+        if not self.username or not self.password:
+            return
+
+        try:
+            resp = requests.post(
+                f"{self.base_url}/oauth2/token",
+                data={
+                    "grant_type": "password",
+                    "service": self.registry,
+                    "username": self.username,
+                    "password": self.password,
+                    "scope": "registry:catalog:* repository:*:metadata_read repository:*:delete repository:*:pull",
+                },
+                timeout=10,
+            )
+            if resp.status_code == 200:
+                access_token = resp.json().get("access_token")
+                if access_token:
+                    self.session.headers.update({"Authorization": f"Bearer {access_token}"})
+                    logger.debug(f"ACR OAuth2 token obtained for {self.registry}")
+                    return
+            logger.warning(f"ACR token exchange returned {resp.status_code}; falling back to Basic auth")
+        except Exception as e:
+            logger.warning(f"ACR OAuth2 token exchange failed: {e}; falling back to Basic auth")
+
+        # Basic auth fallback (works for some ACR configurations)
+        self.session.auth = (self.username, self.password)
+
+    def test_connection(self) -> dict:
+        """Test ACR connection by performing an authenticated GET /v2/ call."""
+        try:
+            resp = self.session.get(f"{self.base_url}/v2/", timeout=10)
+            if resp.status_code == 200:
+                return {"success": True, "message": f"Connected to ACR: {self.registry}"}
+            if resp.status_code in (401, 403):
+                return {
+                    "success": False,
+                    "message": "ACR Authentication Failed: Check admin credentials or token scopes",
+                    "type": "AUTH_ERROR",
+                }
+            return {
+                "success": False,
+                "message": f"ACR returned unexpected status {resp.status_code}",
+                "type": "NETWORK_ERROR",
+            }
+        except requests.exceptions.RequestException as e:
+            return {"success": False, "message": f"Network error: {str(e)}", "type": "NETWORK_ERROR"}
+        except Exception as e:
+            return {"success": False, "message": str(e), "type": "UNKNOWN_ERROR"}
+
+    def _get_repositories(self, limit: int = 100) -> List[str]:
+        """List all repositories in the registry with Link-header pagination."""
+        repos: List[str] = []
+        url = f"{self.base_url}/v2/_catalog"
+        while url and len(repos) < limit:
+            resp = self.session.get(url, params={"n": min(100, limit - len(repos))}, timeout=10)
+            if resp.status_code != 200:
+                logger.error(f"ACR catalog listing failed: {resp.status_code} {resp.text[:200]}")
+                break
+            repos.extend(resp.json().get("repositories") or [])
+            # Follow Link header for next page
+            link = resp.headers.get("Link", "")
+            if 'rel="next"' in link:
+                match = re.search(r'<([^>]+)>', link)
+                if match:
+                    path = match.group(1)
+                    url = f"{self.base_url}{path}" if path.startswith("/") else path
+                else:
+                    break
+            else:
+                break
+        return repos[:limit]
+
+    def _get_tags(self, repo_name: str) -> List[str]:
+        """List all tags for a repository with Link-header pagination."""
+        tags: List[str] = []
+        url = f"{self.base_url}/v2/{repo_name}/tags/list"
+        while url:
+            resp = self.session.get(url, params={"n": 100}, timeout=10)
+            if resp.status_code != 200:
+                break
+            tags.extend(resp.json().get("tags") or [])
+            link = resp.headers.get("Link", "")
+            if 'rel="next"' in link:
+                match = re.search(r'<([^>]+)>', link)
+                if match:
+                    path = match.group(1)
+                    url = f"{self.base_url}{path}" if path.startswith("/") else path
+                else:
+                    break
+            else:
+                break
+        return tags
+
+    def _get_manifest_info(self, repo_name: str, tag: str) -> Tuple[str, int, datetime]:
+        """Fetch the manifest digest and compressed layer size for a given tag."""
+        digest = ""
+        size = 0
+        created_at = datetime.utcnow()
+        try:
+            headers = {"Accept": "application/vnd.docker.distribution.manifest.v2+json"}
+            resp = self.session.get(
+                f"{self.base_url}/v2/{repo_name}/manifests/{tag}",
+                headers=headers,
+                timeout=10,
+            )
+            if resp.status_code == 200:
+                digest = resp.headers.get("Docker-Content-Digest", "")
+                data = resp.json()
+                size = data.get("config", {}).get("size", 0) + sum(
+                    layer.get("size", 0) for layer in data.get("layers", [])
+                )
+        except Exception:
+            pass
+        return digest, size, created_at
+
+    def list_images(self, limit: int = 100, bypass_cache: bool = False) -> List[ImageArtifact]:
+        """List all images in ACR with full pagination support."""
+        cache_key = f"acr_{self.config.id}_{limit}"
+        if not bypass_cache:
+            cached = get_cached_images(cache_key)
+            if cached:
+                return cached
+
+        artifacts: List[ImageArtifact] = []
+        try:
+            repos = self._get_repositories(limit=limit)
+            for repo_name in repos:
+                tags = self._get_tags(repo_name)
+                if not tags:
+                    # Represent untagged manifests with a placeholder
+                    artifacts.append(ImageArtifact(
+                        tags=[f"{repo_name}:<none>"],
+                        size_bytes=0,
+                        created_at=datetime.utcnow(),
+                        digest="",
+                        source=self.config.name,
+                        bloat_score=100,
+                    ))
+                    continue
+
+                for tag in tags:
+                    digest, size, created_at = self._get_manifest_info(repo_name, tag)
+                    full_tag = f"{repo_name}:{tag}"
+                    analysis = BloatAnalyzer.analyze_image([full_tag], size)
+                    artifacts.append(ImageArtifact(
+                        tags=[full_tag],
+                        size_bytes=size,
+                        created_at=created_at,
+                        digest=digest,
+                        source=self.config.name,
+                        bloat_score=analysis["score"],
+                        bloat_issues=json.dumps(analysis["issues"]) if analysis["issues"] else None,
+                    ))
+                    if len(artifacts) >= limit:
+                        break
+                if len(artifacts) >= limit:
+                    break
+
+            set_cached_images(cache_key, artifacts)
+        except Exception as e:
+            logger.error(f"ACR list_images failed: {e}")
+
+        return artifacts
+
+    def get_manifest_size(self, digest: str) -> int:
+        return 0  # Size captured during list_images via manifest fetch
+
+    def delete_image(
+        self,
+        session: Session,
+        image_id: str,
+        dry_run: bool = True,
+        force: bool = False,
+    ) -> dict:
+        """Delete an ACR image by targeting its manifest digest directly.
+
+        Accepts ``repo@sha256:<digest>`` or ``repo:tag`` as ``image_id``.
+        For tag-based IDs the manifest digest is resolved first via a HEAD
+        request so the correct, immutable manifest is deleted.
+        """
+        if dry_run:
+            return {
+                "success": True,
+                "message": f"DRY RUN: Would delete ACR image {image_id}",
+                "image_id": image_id,
+                "image_tags": [image_id],
+                "bytes_freed": 0,
+                "savings_usd": 0.0,
+                "dry_run": True,
+            }
+
+        try:
+            # --- Resolve repo + digest ---
+            if "@" in image_id:
+                # Format: repo@sha256:<digest>
+                repo, digest = image_id.split("@", 1)
+            elif ":" in image_id:
+                repo, tag = image_id.rsplit(":", 1)
+                if tag.startswith("sha256:"):
+                    digest = tag
+                else:
+                    # Resolve tag → digest via HEAD request
+                    head_resp = self.session.head(
+                        f"{self.base_url}/v2/{repo}/manifests/{tag}",
+                        headers={"Accept": "application/vnd.docker.distribution.manifest.v2+json"},
+                        timeout=10,
+                    )
+                    if head_resp.status_code != 200:
+                        return {
+                            "success": False,
+                            "message": f"Could not resolve tag '{tag}' to digest: HTTP {head_resp.status_code}",
+                        }
+                    digest = head_resp.headers.get("Docker-Content-Digest", "")
+                    if not digest:
+                        return {"success": False, "message": f"Registry returned no digest for tag '{tag}'"}
+            else:
+                return {"success": False, "message": f"Invalid ACR image identifier: {image_id}"}
+
+            # --- Delete manifest by digest ---
+            del_resp = self.session.delete(
+                f"{self.base_url}/v2/{repo}/manifests/{digest}",
+                timeout=10,
+            )
+            if del_resp.status_code in (200, 202):
+                clear_image_cache(f"acr_{self.config.id}_{100}")
+                audit_entry = AuditLog(
+                    action="DELETE",
+                    image_id=image_id,
+                    image_tags=[image_id],
+                    source=self.config.name,
+                    bytes_freed=0,
+                    savings_usd=0.0,
+                    dry_run=False,
+                )
+                session.add(audit_entry)
+                return {
+                    "success": True,
+                    "message": f"Successfully deleted {image_id} from ACR ({self.registry})",
+                    "image_id": image_id,
+                    "image_tags": [image_id],
+                    "bytes_freed": 0,
+                    "savings_usd": 0.0,
+                    "dry_run": False,
+                }
+            return {
+                "success": False,
+                "message": f"ACR deletion failed: HTTP {del_resp.status_code} — {del_resp.text[:200]}",
+            }
+
+        except Exception as e:
+            logger.error(f"ACR delete_image error: {e}")
+            return {"success": False, "message": f"ACR Delete Error: {str(e)}"}
+
+    def list_volumes(self) -> List[VolumeArtifact]:
+        return []
+
+    def delete_volume(self, session, name, force=False) -> dict:
+        return {"success": False, "message": "Volumes not supported for ACR"}
+

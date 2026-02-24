@@ -59,12 +59,13 @@ Create a minimal IAM policy for the Dredge user:
     ```
 
 2.  **Add Registry in Dredge**
-    *   Navigate to **Settings > Registries**.
+    *   Navigate to **Registries**.
     *   Click **"Add Registry"**.
-    *   **Name**: `Production ECR`
+    *   **Name**: `AWS Production`
     *   **Provider**: `ECR`
-    *   **Region**: (If not set via env vars, you may need to specify this in the endpoint or future config).
-    *   **Endpoint**: Leave blank to auto-discover, or specify `https://<account-id>.dkr.ecr.<region>.amazonaws.com`.
+    *   **Endpoint**: `<account-id>.dkr.ecr.<region>.amazonaws.com` (Used to discover region)
+    *   **Username**: Your AWS Access Key ID.
+    *   **Password**: Your AWS Secret Access Key.
     *   Click **Save**.
 
 ## Troubleshooting

@@ -31,13 +31,13 @@ Dredge supports Google Cloud's Artifact Registry. Authentication is handled via 
     ```
 
 2.  **Add Registry in Dredge**
-    *   Navigate to **Settings > Registries**.
+    *   Navigate to **Registries**.
     *   Click **"Add Registry"**.
     *   **Name**: `GCP Artifacts`
     *   **Provider**: `GAR`
-    *   **Endpoint**: `https://<region>-docker.pkg.dev` (e.g., `us-central1-docker.pkg.dev`).
-    *   **Username**: `_json_key` (Standard for Google Auth).
-    *   **Password**: Paste the *contents* of your JSON key file (Minified JSON recommended).
+    *   **Endpoint**: `projects/<project-id>/locations/<region>/repositories/<repo-name>` (Used for resource discovery)
+    *   **Username**: Your GCP Project ID.
+    *   **Password**: Paste the *contents* of your Service Account JSON key file.
     *   Click **Save**.
 
 ## GCR (Container Registry)
