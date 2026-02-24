@@ -10,6 +10,15 @@ from app.models import (
     AppSettings, CleanupPolicy
 )
 
+# Map registry source names to price per GB (matches PROVIDER_PRICES in finops.py)
+SOURCE_PRICE_MAP = {
+    "Local":              0.10,   # Default/ECR
+    "Docker Hub Prod":    0.00,   # Docker Hub fair use
+    "GHCR CI":            0.25,   # GitHub Packages
+    "AWS ECR us-east-1":  0.10,   # AWS ECR
+    "Azure ACR":          0.09,   # Azure ACR
+}
+
 def clear_data(session: Session):
     print("Clearing existing data...")
     session.exec(delete(ImageArtifact))
@@ -141,14 +150,17 @@ def create_audit_logs(session: Session, images):
     for i in range(100):
         action = random.choice(actions)
         img = random.choice(images)
-        
+        # Calculate realistic savings based on provider pricing
+        price_per_gb = SOURCE_PRICE_MAP.get(img.source, 0.10)
+        size_gb = img.size_bytes / (1024 ** 3)
+        savings = size_gb * price_per_gb if action in ["DELETE", "PURGE"] else 0
         log = AuditLog(
             action=action,
             image_id=img.digest,
             image_tags=img.tags,
             source=img.source,
             bytes_freed=img.size_bytes if action in ["DELETE", "PURGE"] else 0,
-            savings_usd=random.uniform(0.01, 2.50) if action in ["DELETE", "PURGE"] else 0,
+            savings_usd=round(savings, 4),
             timestamp=base_date + timedelta(days=random.randint(0, 30), hours=random.randint(0, 23)),
             dry_run=False
         )
@@ -158,21 +170,20 @@ def create_audit_logs(session: Session, images):
 def create_metrics_history(session: Session):
     print("Creating metrics history...")
     base_date = datetime.utcnow() - timedelta(days=30)
-    base_cost = 45.0
     base_gb = 120.0
-    
     for i in range(30):
         date = base_date + timedelta(days=i)
-        # Add some trends (increasing over time)
-        cost = base_cost + (i * 0.8) + random.uniform(-2, 5)
         gb = base_gb + (i * 2.0) + random.uniform(-5, 10)
-        
+        gb = max(10, gb)
+        # Realistic cost: ~60% Local/ECR ($0.10), 20% GHCR ($0.25), 20% Docker Hub ($0.00)
+        avg_price_per_gb = 0.60 * 0.10 + 0.20 * 0.25 + 0.20 * 0.00  # ~$0.11/GB
+        cost = gb * avg_price_per_gb + random.uniform(-0.5, 1.0)
         snapshot = MetricSnapshot(
             date=date,
             total_images=50 + int(i/2),
             total_volumes=12 + int(i/5),
-            total_gb=max(10, gb),
-            total_cost_usd=max(5, cost),
+            total_gb=gb,
+            total_cost_usd=max(0.5, round(cost, 2)),
             efficiency_score=int(80 - (i * 0.5))
         )
         session.add(snapshot)
@@ -187,6 +198,19 @@ def main():
         registries = create_registries(session)
         images = create_images(session, registries)
         create_volumes(session)
+        
+        # Update AppSettings with real provider pricing
+        settings = session.get(AppSettings, 1)
+        if not settings:
+            settings = AppSettings(id=1)
+        settings.custom_price_per_gb = 0.10
+        settings.dockerhub_price_per_gb = 0.00
+        settings.ghcr_price_per_gb = 0.25
+        settings.github_hrc_price_per_gb = 0.07
+        settings.provider_name = "AWS"
+        session.add(settings)
+        session.commit()
+        print("Updated AppSettings with provider pricing.")
         create_audit_logs(session, images)
         create_metrics_history(session)
         

@@ -8,18 +8,21 @@
         <input type="hidden" name="section" value="finops">
         
         <label for="provider_name">Cloud Provider
-            <select id="provider_name" name="provider_name">
+            <select id="provider_name" name="provider_name" onchange="updatePrice()">
                 <option value="AWS" {% if settings.provider_name == 'AWS' %}selected{% endif %}>Amazon Web Services (ECR)</option>
                 <option value="Azure" {% if settings.provider_name == 'Azure' %}selected{% endif %}>Microsoft Azure (ACR)</option>
                 <option value="GCP" {% if settings.provider_name == 'GCP' %}selected{% endif %}>Google Cloud (GCR/GAR)</option>
+                <option value="Docker Hub" {% if settings.provider_name == 'Docker Hub' %}selected{% endif %}>Docker Hub</option>
+                <option value="GHCR" {% if settings.provider_name == 'GHCR' %}selected{% endif %}>GitHub Packages (GHCR)</option>
+                <option value="GitHub HRC" {% if settings.provider_name == 'GitHub HRC' %}selected{% endif %}>GitHub Actions Cache / HRC</option>
                 <option value="Custom" {% if settings.provider_name == 'Custom' %}selected{% endif %}>Custom / On-Premise</option>
             </select>
         </label>
 
         <div class="grid">
-            <label for="custom_price_per_gb">Default / Local Price per GB
-                <input type="number" id="custom_price_per_gb" name="custom_price_per_gb" step="0.01" value="{{ settings.custom_price_per_gb }}">
-                <small>Used for Local and ECR/GCR/ACR</small>
+            <label for="custom_price_per_gb">Price per GB ($/month)
+                <input type="number" id="custom_price_per_gb" name="custom_price_per_gb" step="0.001" value="{{ settings.custom_price_per_gb }}">
+                <small id="price-hint" style="color: var(--text-muted);">Select a provider to auto-fill default pricing</small>
             </label>
             <label for="currency_symbol">Currency
                 <select id="currency_symbol" name="currency_symbol">
@@ -38,25 +41,6 @@
             <div style="flex: 1;"></div>
         </div>
 
-        <div class="grid" style="margin-top: 1rem;">
-            <label for="dockerhub_price_per_gb">Docker Hub Price per GB
-                <input type="number" id="dockerhub_price_per_gb" name="dockerhub_price_per_gb" step="0.01" value="{{ settings.dockerhub_price_per_gb }}">
-                <small>Normally free for public, varies for private</small>
-            </label>
-            <label for="ghcr_price_per_gb">GitHub Packages Price per GB
-                <input type="number" id="ghcr_price_per_gb" name="ghcr_price_per_gb" step="0.01" value="{{ settings.ghcr_price_per_gb }}">
-                <small>GitHub Storage pricing</small>
-            </label>
-        </div>
-
-        <div class="grid" style="margin-top: 1rem;">
-            <label for="github_hrc_price_per_gb">GitHub HRC Price per GB
-                <input type="number" id="github_hrc_price_per_gb" name="github_hrc_price_per_gb" step="0.01" value="{{ settings.github_hrc_price_per_gb }}">
-                <small>GitHub Hosted Runner Controller pricing</small>
-            </label>
-            <div style="flex: 1;"></div>
-        </div>
-
         <footer style="margin-top: 1rem;">
             <button type="submit" class="primary">Save Configuration</button>
             {% if updated %}
@@ -65,3 +49,37 @@
         </footer>
     </form>
 </div>
+
+<script>
+    const PROVIDER_PRICES = {
+        "AWS":        0.10,
+        "Azure":      0.09,
+        "GCP":        0.026,
+        "Docker Hub": 0.00,
+        "GHCR":       0.25,
+        "GitHub HRC": 0.07,
+        "Custom":     0.10
+    };
+
+    function updatePrice() {
+        const provider = document.getElementById('provider_name').value;
+        const priceInput = document.getElementById('custom_price_per_gb');
+        const hint = document.getElementById('price-hint');
+        
+        if (PROVIDER_PRICES.hasOwnProperty(provider)) {
+            const defaultPrice = PROVIDER_PRICES[provider];
+            priceInput.value = defaultPrice;
+            hint.textContent = 'Default: $' + defaultPrice.toFixed(3) + '/GB/month (' + provider + ')';
+        }
+    }
+
+    // Set hint on page load based on current provider
+    (function() {
+        const provider = document.getElementById('provider_name').value;
+        const hint = document.getElementById('price-hint');
+        if (PROVIDER_PRICES.hasOwnProperty(provider)) {
+            const defaultPrice = PROVIDER_PRICES[provider];
+            hint.textContent = 'Default: $' + defaultPrice.toFixed(3) + '/GB/month (' + provider + ')';
+        }
+    })();
+</script>

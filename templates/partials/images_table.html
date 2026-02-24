@@ -60,7 +60,7 @@
                 <th>Actions</th>
             </tr>
         </thead>
-        <tbody>
+        <tbody id="image-tbody">
             {% if images %}
                 {% for image in images %}
                 <tr id="image-{{ image.digest.replace(':', '-') }}">

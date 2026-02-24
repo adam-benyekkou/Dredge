@@ -27,12 +27,23 @@
 <body>
     <div id="progress-bar" class="progress-bar htmx-indicator"></div>
 
+    <!-- Mobile Header -->
+    <header class="mobile-header" style="display: none; justify-content: space-between; align-items: center; padding: 1rem 1.5rem; background: var(--bg-surface); border-bottom: 1px solid var(--border-subtle); position: sticky; top: 0; z-index: 101;">
+        <div style="display: flex; align-items: center; gap: 0.75rem; color: var(--text-main);">
+            <img src="/static/media/dredge_logo.png" style="height: 24px; width: auto;">
+            <span style="font-weight: 700; font-size: 1.1rem;">Dredge</span>
+        </div>
+        <button class="ghost" id="sidebar-toggle" style="padding: 0.25rem;">
+            <i data-lucide="menu"></i>
+        </button>
+    </header>
+
     <!-- Sidebar "Control Deck" -->
-    <aside class="sidebar">
+    <aside class="sidebar" id="sidebar">
         <div class="sidebar-header">
             <div style="display: flex; align-items: center; gap: 0.75rem; color: var(--text-main);">
-                <i data-lucide="anchor" style="color: var(--primary);"></i>
-                <span style="font-weight: 700; font-size: 1.25rem; letter-spacing: -0.5px;">Dredge</span>
+                <img src="/static/media/dredge_logo.png" style="height: 72px; width: auto;">
+                <span style="font-weight: 700; font-size: 1.25rem; letter-spacing: -0.5px;"><span style="color: #38bdf8;">D</span>redge</span>
             </div>
         </div>
         
@@ -150,6 +161,25 @@
     <!-- Scripts -->
     <script>
         lucide.createIcons();
+
+        // Sidebar Mobile Toggle
+        const sidebar = document.getElementById('sidebar');
+        const toggle = document.getElementById('sidebar-toggle');
+        
+        if (toggle) {
+            toggle.addEventListener('click', () => {
+                sidebar.classList.toggle('open');
+            });
+        }
+        
+        // Close sidebar when clicking links on mobile
+        document.querySelectorAll('.sidebar nav a').forEach(link => {
+            link.addEventListener('click', () => {
+                if (window.innerWidth < 1024) {
+                    sidebar.classList.remove('open');
+                }
+            });
+        });
         
         // Re-initialize icons after HTMX swaps
         document.body.addEventListener('htmx:afterSwap', function(evt) {

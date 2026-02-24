@@ -6,6 +6,29 @@
 
 {% block top_actions %}
     <div style="display: flex; gap: 1rem; align-items: center;">
+        <!-- Search Box -->
+        <div style="position: relative;">
+            <i data-lucide="search" style="position: absolute; left: 0.75rem; top: 50%; transform: translateY(-50%); width: 16px; height: 16px; color: var(--text-muted);"></i>
+            <input 
+                type="text" 
+                id="volume-search" 
+                placeholder="Search volumes..." 
+                style="margin: 0; padding: 0.4rem 1rem 0.4rem 2.25rem; font-size: 0.85rem; width: 250px;"
+                onkeyup="filterVolumes(this.value)"
+            >
+        </div>
+
+        <!-- Batch Action (Purge) -->
+        <form id="batch-form" hx-delete="/volumes/batch" hx-confirm="⚠️ PERMANENTLY PURGE all selected volumes? This action cannot be undone!" hx-target="#volume-table" hx-swap="outerHTML" hx-indicator="#batch-loader" style="margin: 0;">
+            <button id="batch-delete-btn" type="submit" class="btn-danger" style="display: none; padding: 0.5rem 1rem; font-size: 0.9rem;">
+                <i data-lucide="trash-2" style="width: 16px; height: 16px; vertical-align: middle; margin-right: 0.25rem;"></i>
+                Purge Selected
+            </button>
+            <div id="batch-loader" class="htmx-indicator" style="display: none; margin-left: 0.5rem;">
+                <span aria-busy="true">Purging...</span>
+            </div>
+        </form>
+
         <form hx-get="/volumes" hx-target="body" hx-push-url="true" style="margin: 0;">
             <select name="source" onchange="this.form.submit()" style="margin: 0; padding: 0.4rem 2rem 0.4rem 1rem; font-size: 0.85rem; height: auto; background-color: var(--bg-surface); color: var(--text-main); border: 1px solid var(--border-subtle);">
                 <option value="All" {% if current_source == 'All' %}selected{% endif %}>All Sources</option>
@@ -29,10 +52,65 @@
 {% endblock %}
 
 {% block content %}
+<script>
+    document.body.addEventListener('refreshVolumes', function() {
+        window.location.reload();
+    });
+
+    function filterVolumes(query) {
+        const rows = document.querySelectorAll('#volume-tbody tr');
+        query = query.toLowerCase();
+        
+        rows.forEach(row => {
+            const name = row.querySelector('.font-mono').textContent.toLowerCase();
+            const driver = row.cells[2].textContent.toLowerCase(); // Adjusted index due to checkbox
+            
+            if (name.includes(query) || driver.includes(query)) {
+                row.style.display = '';
+            } else {
+                row.style.display = 'none';
+            }
+        });
+    }
+
+    // Checkbox Logic for Volumes
+    document.addEventListener('DOMContentLoaded', initVolumeCheckboxLogic);
+    document.body.addEventListener('htmx:afterSwap', (e) => {
+        if (e.detail.target.id === 'volume-table') initVolumeCheckboxLogic();
+    });
+
+    function initVolumeCheckboxLogic() {
+        const selectAll = document.getElementById('select-all-volumes');
+        const checkboxes = document.querySelectorAll('input[name="selected_volumes"]');
+        const batchBtn = document.getElementById('batch-delete-btn');
+        
+        if (!batchBtn) return;
+
+        function updateBatchBtn() {
+            const checkedCount = document.querySelectorAll('input[name="selected_volumes"]:checked').length;
+            batchBtn.style.display = checkedCount > 0 ? 'inline-block' : 'none';
+            if (checkedCount > 0) {
+                batchBtn.innerHTML = `<i data-lucide="trash-2" style="width: 16px; height: 16px; vertical-align: middle; margin-right: 0.25rem;"></i> Purge Selected (${checkedCount})`;
+                lucide.createIcons();
+            }
+        }
+
+        if (selectAll) {
+            selectAll.addEventListener('change', (e) => {
+                checkboxes.forEach(cb => cb.checked = e.target.checked);
+                updateBatchBtn();
+            });
+        }
+
+        checkboxes.forEach(cb => cb.addEventListener('change', updateBatchBtn));
+    }
+</script>
+
 <div class="table-container" id="volume-table">
     <table>
         <thead>
             <tr>
+                <th style="width: 40px;"><input type="checkbox" id="select-all-volumes"></th>
                 <th>Volume Name</th>
                 <th>Driver</th>
                 <th>Source</th>
@@ -43,10 +121,13 @@
                 <th>Actions</th>
             </tr>
         </thead>
-        <tbody>
+        <tbody id="volume-tbody">
             {% if volumes %}
                 {% for volume in volumes %}
                 <tr id="volume-{{ volume.name }}">
+                    <td>
+                        <input type="checkbox" name="selected_volumes" value="{{ volume.name }}" form="batch-form">
+                    </td>
                     <td class="font-mono" style="color: var(--accent);">{{ volume.name }}</td>
                     <td>{{ volume.driver }}</td>
                     <td><span class="tag-pill">{{ volume.source }}</span></td>
@@ -54,9 +135,15 @@
                     <td class="font-mono" style="text-align: right;">{{ (volume.size_bytes / 1024**2)|round(2) }} MB</td>
                     <td style="text-align: right;">{{ settings.currency_symbol }}{{ (volume.size_bytes / 1024**3 * settings.custom_price_per_gb)|round(2) }}/mo</td>
                     <td>
-                        <span class="badge {{ volume.status.value.lower() }}">
-                            {{ volume.status.value }}
-                        </span>
+                        {% if volume.status.value == 'DANGLING' %}
+                            <span class="badge dangling">
+                                {{ volume.status.value }}
+                            </span>
+                        {% else %}
+                            <span class="badge active">
+                                {{ volume.status.value }}
+                            </span>
+                        {% endif %}
                     </td>
                     <td>
                         <button 

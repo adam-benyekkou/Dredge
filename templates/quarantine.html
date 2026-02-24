@@ -36,11 +36,10 @@
             <div style="display: flex; gap: 1rem;">
                 <button 
                     type="button"
-                    class="primary"
+                    class="btn-primary"
                     onclick="bulkUnquarantine()"
                     style="padding: 0.5rem 1.5rem; font-size: 0.85rem;">
-                    <i data-lucide="undo-2" style="width: 14px; height: 14px; margin-right: 0.5rem; vertical-align: middle;"></i>
-                    Unquarantine Selected
+                    Restore Selected
                 </button>
                 <button 
                     type="button"
@@ -98,18 +97,16 @@
                         <td style="text-align: center;">
                             <div style="display: flex; gap: 0.5rem; justify-content: center;">
                                 <button 
-                                    class="secondary outline" 
-                                    style="padding: 0.5rem 1rem; font-size: 0.85rem;"
+                                    class="btn-primary" 
+                                    style="padding: 0.25rem 0.75rem; font-size: 0.8rem;"
                                     onclick="unquarantineSingle({{ img.id }})">
-                                    <i data-lucide="undo-2" style="width: 14px; height: 14px; margin-right: 0.25rem; vertical-align: middle;"></i>
-                                    Unquarantine
+                                    Restore
                                 </button>
                                 <button 
                                     class="btn-danger"
-                                    style="padding: 0.5rem 1rem; font-size: 0.85rem;"
+                                    style="padding: 0.25rem 0.75rem; font-size: 0.8rem;"
                                     onclick="purgeSingle({{ img.id }})">
-                                    <i data-lucide="trash-2" style="width: 14px; height: 14px; margin-right: 0.25rem; vertical-align: middle;"></i>
-                                    Purge
+                                    <i data-lucide="trash-2" style="width: 14px; height: 14px;"></i> Purge
                                 </button>
                             </div>
                         </td>
@@ -143,6 +140,11 @@
 </div>
 
 <script>
+    // Refresh logic for Restore button styling consistency
+    document.body.addEventListener('showMessage', function(e) {
+        // If image was restored, we might want to refresh images list if visible
+        // but quarantine handles row removal manually via JS.
+    });
     function toggleSelectAll(checkbox) {
         const checkboxes = document.querySelectorAll('.image-checkbox');
         checkboxes.forEach(cb => cb.checked = checkbox.checked);

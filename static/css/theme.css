@@ -206,19 +206,43 @@ button, .btn {
 }
 
 button.primary, .btn-primary {
-    background-color: var(--primary);
-    border-color: var(--primary);
-    color: white;
+    background-color: rgba(0, 119, 182, 0.08);
+    border: 1px solid var(--primary);
+    color: var(--primary);
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
 }
 
-button.primary:active, .btn-primary:active {
+button.primary:hover, .btn-primary:hover {
+    background-color: var(--primary);
+    color: white;
+    box-shadow: 0 0 12px rgba(0, 119, 182, 0.3);
+}
+
+button.primary:active, .btn-primary:active, .btn-danger:active {
     box-shadow: inset 0 2px 4px rgba(0,0,0,0.2);
+    transform: translateY(1px);
 }
 
 button.danger, .btn-danger {
+    background-color: rgba(217, 125, 84, 0.08);
+    border: 1px solid var(--danger);
+    color: var(--danger);
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+button.danger:hover, .btn-danger:hover {
     background-color: var(--danger);
-    border-color: var(--danger);
     color: white;
+    box-shadow: 0 0 12px rgba(217, 125, 84, 0.3);
+}
+
+button.danger:active, .btn-danger:active {
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.2);
+    transform: translateY(1px);
 }
 
 button.ghost, .btn-ghost {
@@ -293,6 +317,57 @@ tbody td {
 td.image-id, .font-mono, td[data-col="repository"], td[data-col="tag"], td[data-col="size"], td[data-col="id"] {
     font-family: var(--font-mono);
     color: var(--accent);
+}
+
+/* Mobile Responsiveness */
+@media (max-width: 1024px) {
+    body {
+        flex-direction: column;
+    }
+
+    .mobile-header {
+        display: flex !important;
+    }
+
+    .sidebar {
+        width: 100%;
+        height: auto;
+        max-height: 0;
+        position: fixed;
+        top: 60px; /* Below mobile header */
+        border-right: none;
+        border-bottom: 1px solid var(--border-subtle);
+        transition: max-height 0.3s ease-in-out;
+        overflow: hidden;
+    }
+
+    .sidebar.open {
+        max-height: 100vh;
+        overflow-y: auto;
+    }
+
+    .sidebar-header, .sidebar-footer {
+        display: none;
+    }
+
+    .main-content {
+        margin-left: 0;
+        width: 100%;
+        padding: 1.5rem;
+    }
+
+    .grid-3, .grid-2 {
+        grid-template-columns: 1fr;
+    }
+
+    .top-actions {
+        flex-wrap: wrap;
+        gap: 0.5rem !important;
+    }
+
+    input[type="text"] {
+        width: 100% !important;
+    }
 }
 
 /* Tags Pills */
@@ -397,15 +472,15 @@ input:checked + .toggle-track .toggle-thumb {
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.5px;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
 }
 
 .badge.active {
     background-color: rgba(74, 222, 128, 0.1);
     color: #4ade80; /* bright green */
     border: 1px solid #4ade80;
-    display: inline-flex;
-    align-items: center;
-    gap: 0.35rem;
 }
 
 .badge.active::before {
@@ -417,31 +492,34 @@ input:checked + .toggle-track .toggle-thumb {
     background-color: #4ade80;
 }
 
-.badge.quarantined {
-    background: repeating-linear-gradient(
-        45deg,
-        #273445,
-        #273445 10px,
-        #D97D54 10px,
-        #D97D54 20px
-    );
-    color: white;
-    text-shadow: 0 1px 2px rgba(0,0,0,0.8);
-    border: 1px solid var(--danger);
-}
-
-.badge.deleted {
-    background-color: var(--bg-surface-hover);
-    color: var(--text-muted);
-    border: 1px solid var(--border-subtle);
-    text-decoration: line-through;
-}
-
-/* Audit Log & General Badges */
-.badge-warning {
+.badge.quarantined, .badge.dangling, .badge-warning {
     background-color: rgba(245, 158, 11, 0.1);
     color: #f59e0b;
     border: 1px solid #f59e0b;
+}
+
+.badge.quarantined::before, .badge.dangling::before, .badge-warning::before {
+    content: '';
+    display: block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background-color: #f59e0b;
+}
+
+.badge.deleted, .badge-danger {
+    background-color: rgba(217, 125, 84, 0.1);
+    color: var(--danger);
+    border: 1px solid var(--danger);
+}
+
+.badge.deleted::before, .badge-danger::before {
+    content: '';
+    display: block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background-color: var(--danger);
 }
 
 .badge-success {

@@ -6,6 +6,18 @@
 
 {% block top_actions %}
     <div style="display: flex; gap: 1rem; align-items: center;">
+        <!-- Search Box -->
+        <div style="position: relative;">
+            <i data-lucide="search" style="position: absolute; left: 0.75rem; top: 50%; transform: translateY(-50%); width: 16px; height: 16px; color: var(--text-muted);"></i>
+            <input 
+                type="text" 
+                id="image-search" 
+                placeholder="Search images..." 
+                style="margin: 0; padding: 0.4rem 1rem 0.4rem 2.25rem; font-size: 0.85rem; width: 250px;"
+                onkeyup="filterImages(this.value)"
+            >
+        </div>
+
         <!-- Filter Form -->
         <form hx-get="/images" hx-target="body" hx-push-url="true" style="margin: 0;">
             <select name="source" onchange="this.form.submit()" style="margin: 0; padding: 0.4rem 2rem 0.4rem 1rem; font-size: 0.85rem; height: auto; background-color: var(--bg-surface); color: var(--text-main); border: 1px solid var(--border-subtle);">
@@ -40,6 +52,36 @@
 {% endblock %}
 
 {% block content %}
+    <script>
+        function filterImages(query) {
+            const rows = document.querySelectorAll('#image-tbody tr');
+            if (!rows.length) return;
+            query = query.toLowerCase();
+            
+            rows.forEach(row => {
+                if (row.cells.length < 3) return; // Skip empty/loading rows
+                const repo = row.cells[1].textContent.toLowerCase();
+                const tag = row.cells[2].textContent.toLowerCase();
+                
+                if (repo.includes(query) || tag.includes(query)) {
+                    row.style.display = '';
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+        }
+        
+        // Handle search persistence after HTMX swap
+        document.body.addEventListener('htmx:afterSwap', function(evt) {
+            if (evt.detail.target.id === 'image-table') {
+                const searchInput = document.getElementById('image-search');
+                if (searchInput) {
+                    filterImages(searchInput.value);
+                }
+            }
+        });
+    </script>
+
     <!-- Container that might be swapped via HTMX if targeting #image-table directly (e.g. from Batch Delete) -->
     <!-- However, we moved the table to a partial. The initial load includes it. -->
     

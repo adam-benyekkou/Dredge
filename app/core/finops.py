@@ -5,6 +5,19 @@ from app.core.db import engine
 from app.models import AppSettings
 from sqlmodel import Session
 
+
+# Default provider pricing (USD per GB per month)
+# Source: Public cloud pricing pages as of 2025-2026
+PROVIDER_PRICES = {
+    "AWS":         0.10,   # AWS ECR
+    "Azure":       0.09,   # Azure ACR (~$0.003/GB/day)
+    "GCP":         0.026,  # Google Artifact Registry / GCR
+    "Docker Hub":  0.00,   # Fair use, no per-GB charge
+    "GHCR":        0.25,   # GitHub Packages storage
+    "GitHub HRC":  0.07,   # GitHub Actions Cache
+    "Custom":      0.10,   # User-defined default
+}
+
 class CostCalculator:
     """Calculate storage costs for Docker images"""
     

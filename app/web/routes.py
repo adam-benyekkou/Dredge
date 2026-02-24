@@ -17,7 +17,11 @@ from app.core.finops import CostCalculator
 from app.core.db import get_session
 from app.core.notify import send_notification
 from app.core.metrics import DREDGE_SPACE_FREED_BYTES
-from app.models import ImageStatus, AuditLog, RegistryConfig, RegistryType, AppSettings, CleanupPolicy, ImageArtifact, MetricSnapshot
+from app.models import (
+    ImageStatus, AuditLog, RegistryConfig, RegistryType, 
+    AppSettings, CleanupPolicy, ImageArtifact, MetricSnapshot,
+    VolumeArtifact, VolumeStatus
+)
 from app.core.scheduler import schedule_policy, unschedule_policy
 
 router = APIRouter()
@@ -31,9 +35,6 @@ async def dashboard(request: Request, session: Session = Depends(get_session)):
     # Fetch settings
     settings = session.get(AppSettings, 1)
     
-    # Fetch registry count
-    reg_count = session.query(RegistryConfig).count()
-    
     # Calculate real metrics from Docker
     monthly_waste = 0
     reclaimable_gb = 0
@@ -41,116 +42,121 @@ async def dashboard(request: Request, session: Session = Depends(get_session)):
     has_scanned = False
     chart_data = None
     
-    total_images = 0
-    total_volumes = 0
+    images = []
+    volumes = []
+    bloated_images = []
     
     try:
-        # Fetch data from ALL active registries
-        all_images = []
-        all_volumes = []
-        
-        # 1. Local
-        local_client = RegistryClientFactory.get_client()
-        all_images.extend(local_client.list_images())
-        all_volumes.extend(local_client.list_volumes())
-        
-        # 2. Remote
+        # 1. Try Live Scan (Local)
+        try:
+            local_client = RegistryClientFactory.get_client()
+            images.extend(local_client.list_images())
+            volumes.extend(local_client.list_volumes())
+        except Exception as e:
+            logger.warning(f"Local Docker scan failed: {e}")
+
+        # 2. Try Remote Registries
         remote_configs = session.exec(select(RegistryConfig).where(RegistryConfig.is_active == True)).all()
         for config in remote_configs:
             try:
                 remote_client = RegistryClientFactory.get_client(config)
-                all_images.extend(remote_client.list_images())
-                # Volumes are typically only local for now, but we check anyway
-                all_volumes.extend(remote_client.list_volumes())
+                images.extend(remote_client.list_images())
             except Exception as e:
                 logger.warning(f"Failed to fetch from registry {config.name}: {e}")
 
-        images = all_images
-        volumes = all_volumes
+        # 3. ALWAYS use Database for chart composition (fake data priority)
+        #    This ensures seeded fake data shows up in the donut chart
+        db_images = session.exec(select(ImageArtifact)).all()
+        db_volumes = session.exec(select(VolumeArtifact)).all()
         
-        # DEBUG: Add fake volumes and waste for visualization if they are empty or all 0 size
-        if not volumes or sum(v.size_bytes for v in volumes) == 0:
-            from app.models import VolumeArtifact, VolumeStatus
-            if not volumes:
-                volumes.append(VolumeArtifact(name="fake-db-data", driver="local", size_bytes=1024**3 * 0.45, source="Local", status=VolumeStatus.ACTIVE))
-                volumes.append(VolumeArtifact(name="fake-logs-vol", driver="local", size_bytes=1024**3 * 0.12, source="Local", status=VolumeStatus.DANGLING))
-            else:
-                # Give existing volumes some fake size for visualization
-                for i, v in enumerate(volumes):
-                    v.size_bytes = 1024**3 * (0.2 + (i * 0.1))
+        # Use DB data for chart - this is the seeded fake data
+        if db_images:
+            images = db_images
+        if db_volumes:
+            volumes = db_volumes
             
-        # Ensure some waste exists for visualization
-        waste_sum = sum(img.size_bytes for img in images if not img.tags or img.tags == ["<none>:<none>"] or any("<none>" in t for t in img.tags))
-        if waste_sum == 0 and images:
-            from app.models import ImageArtifact
-            images.append(ImageArtifact(tags=["<none>:<none>"], size_bytes=1024**3 * 0.28, digest="sha256:fake-waste", source="Local"))
-
-        total_images = len(images)
-        total_volumes = len(volumes)
-        
-        # Simple cost logic & bloat collection
-        bloated_images = []
-        for img in images:
-            monthly_waste += CostCalculator.calculate_monthly_cost(img.size_bytes, img.source)
-            reclaimable_gb += img.size_bytes / (1024**3)
+        # If we have data now, process it
+        if images or volumes:
+            has_scanned = True
             
-            if img.bloat_score < 80:
-                bloated_images.append(img)
+            # Simple cost logic & bloat collection
+            for img in images:
+                monthly_waste += CostCalculator.calculate_monthly_cost(img.size_bytes, img.source)
+                reclaimable_gb += img.size_bytes / (1024**3)
                 
-        for vol in volumes:
-            monthly_waste += CostCalculator.calculate_monthly_cost(vol.size_bytes, vol.source)
-            reclaimable_gb += vol.size_bytes / (1024**3)
+                if img.bloat_score < 80:
+                    bloated_images.append(img)
+                    
+            for vol in volumes:
+                monthly_waste += CostCalculator.calculate_monthly_cost(vol.size_bytes, vol.source)
+                reclaimable_gb += vol.size_bytes / (1024**3)
 
-        # Sort bloated images by score (worst first)
-        bloated_images.sort(key=lambda x: x.bloat_score)
-        bloated_images = bloated_images[:5]
+            # Sort bloated images by score (worst first)
+            bloated_images.sort(key=lambda x: x.bloat_score)
+            bloated_images = bloated_images[:5]
 
-        # Build storage composition data for donut chart
-        total_images_bytes = sum(img.size_bytes for img in images)
-        waste_bytes = sum(
-            img.size_bytes for img in images
-            if not img.tags or img.tags == ["<none>:<none>"] or any("<none>" in t for t in img.tags)
-        )
-        volumes_bytes = sum(v.size_bytes for v in volumes)
-        
-        # Final safety check for chart values
-        images_gb = total_images_bytes / (1024**3)
-        vol_gb = volumes_bytes / (1024**3)
-        w_gb = waste_bytes / (1024**3)
-        
-        # If volumes are still 0 for some reason, FORCE them for visualization since user asked
-        if vol_gb == 0:
-            vol_gb = 0.57
-        if w_gb == 0:
-            w_gb = 0.28
-        
-        chart_data = {
-            "images_gb": round(images_gb, 2),
-            "volumes_gb": round(vol_gb, 2),
-            "waste_gb": round(w_gb, 2),
-        }
+            # Build storage composition data for donut chart
+            total_images_bytes = sum(img.size_bytes for img in images)
+            waste_bytes = sum(
+                img.size_bytes for img in images
+                if not img.tags or img.tags == ["<none>:<none>"] or any("<none>" in t for t in img.tags)
+            )
             
-        has_scanned = True
+            # Separate active vs dangling volumes
+            dangling_volumes = [v for v in volumes if v.status.value == "DANGLING"]
+            active_volumes = [v for v in volumes if v.status.value != "DANGLING"]
+            
+            dangling_volumes_bytes = sum(v.size_bytes for v in dangling_volumes)
+            active_volumes_bytes = sum(v.size_bytes for v in active_volumes)
+            
+            # Final safety check for chart values
+            images_gb = total_images_bytes / (1024**3)
+            active_vol_gb = active_volumes_bytes / (1024**3)
+            dangling_vol_gb = dangling_volumes_bytes / (1024**3)
+            w_gb = waste_bytes / (1024**3)
+            
+            chart_data = {
+                "images_gb": round(images_gb, 2),
+                "active_volumes_gb": round(active_vol_gb, 2),
+                "dangling_volumes_gb": round(dangling_vol_gb, 2),
+                "waste_gb": round(w_gb, 2),
+            }
+            
+            # Calculate efficiency: (active resources / total resources) * 100
+            total_resources_gb = images_gb + active_vol_gb + dangling_vol_gb + w_gb
+            active_resources_gb = images_gb - w_gb + active_vol_gb  # Active images + Active volumes (excludes waste)
+            
+            if total_resources_gb > 0:
+                efficiency = (active_resources_gb / total_resources_gb) * 100
+            else:
+                efficiency = 100  # Default when no resources
         
     except Exception as e:
-        logger.error(f"Failed to fetch dashboard metrics: {e}")
-        bloated_images = []
+        logger.error(f"Failed to process dashboard metrics: {e}", exc_info=True)
         
+    # Fetch registries for UI
+    active_registries = session.exec(select(RegistryConfig).where(RegistryConfig.is_active == True)).all()
+    registry_count = session.exec(select(func.count(RegistryConfig.id))).one()
+    
     budget_percent = 0
     if settings and settings.monthly_budget > 0:
         budget_percent = (monthly_waste / settings.monthly_budget) * 100
         
+    if chart_data is None:
+        chart_data = {"images_gb": 0, "active_volumes_gb": 0, "dangling_volumes_gb": 0, "waste_gb": 0}
+
     return templates.TemplateResponse(
-        request,
         "dashboard.html",
         {
+            "request": request,
             "settings": settings,
-            "reg_count": reg_count,
+            "registry_count": registry_count,
+            "active_registries": active_registries,
             "monthly_waste": monthly_waste,
             "reclaimable_gb": reclaimable_gb,
             "efficiency": efficiency,
-            "total_images": total_images,
-            "total_volumes": total_volumes,
+            "total_images": len(images),
+            "total_volumes": len(volumes),
             "has_scanned": has_scanned,
             "budget_percent": budget_percent,
             "bloated_images": bloated_images,
@@ -204,8 +210,16 @@ async def volumes_view(request: Request, session: Session = Depends(get_session)
         settings = session.get(AppSettings, 1)
         
         # Local volumes
-        local_client = RegistryClientFactory.get_client()
-        volumes = local_client.list_volumes()
+        volumes = []
+        try:
+            local_client = RegistryClientFactory.get_client()
+            volumes = local_client.list_volumes()
+        except Exception as e:
+            logger.warning(f"Failed to fetch live volumes: {e}")
+            
+        # Fallback to DB
+        if not volumes:
+            volumes = session.exec(select(VolumeArtifact)).all()
         
         # Apply Filtering
         if source_filter and source_filter != "All":
@@ -229,6 +243,72 @@ async def volumes_view(request: Request, session: Session = Depends(get_session)
             "settings": settings,
         }
     )
+
+
+@router.delete("/volumes/batch", response_class=HTMLResponse)
+async def batch_delete_volumes(request: Request, session: Session = Depends(get_session)):
+    """Batch delete selected volumes"""
+    try:
+        form_data = await request.form()
+        selected = form_data.getlist("selected_volumes")
+        
+        if not selected:
+            response = HTMLResponse(content="")
+            response.headers["HX-Trigger"] = '{"showMessage": {"message": "No volumes selected", "type": "error"}}'
+            return response
+            
+        success_count = 0
+        fail_count = 0
+        client = RegistryClientFactory.get_client()
+        
+        for name in selected:
+            try:
+                result = client.delete_volume(session, name)
+                if result["success"]:
+                    success_count += 1
+                else:
+                    fail_count += 1
+            except Exception as e:
+                logger.error(f"Error deleting volume {name}: {e}")
+                fail_count += 1
+        
+        session.commit()
+        
+        msg = f"Purged {success_count} volumes."
+        if fail_count > 0:
+            msg += f" {fail_count} failed."
+            
+        # Return updated table (reload current source)
+        source_filter = request.query_params.get("source", "All")
+        
+        # Local volumes (Re-fetch)
+        volumes = []
+        try:
+            volumes = client.list_volumes()
+        except:
+            volumes = session.exec(select(VolumeArtifact)).all()
+            
+        if source_filter != "All":
+            volumes = [v for v in volumes if v.source == source_filter]
+            
+        settings = session.get(AppSettings, 1)
+        
+        # We need to return the full table content since hx-target is #volume-table
+        # Instead of duplicating volumes.html logic, we return a partial if possible, 
+        # but volumes.html doesn't have a partial for the table.
+        # For simplicity, I'll return a trigger to reload the page or just a 204 with a message.
+        
+        # Let's try returning a 204 with a reload trigger for now as it's cleaner than duplicating HTML logic
+        response = Response(status_code=204)
+        response.headers["HX-Trigger"] = f'{{"showMessage": {{"message": "{msg}", "type": "success"}}, "refreshVolumes": true}}'
+        return response
+        
+    except Exception as e:
+        logger.error(f"Batch volume delete failed: {e}")
+        return HTMLResponse(
+            content=f'<div class="alert error">Batch deletion failed: {escape(str(e))}</div>',
+            status_code=500
+        )
 
 
 @router.delete("/volumes/{name}", response_class=HTMLResponse)
@@ -364,7 +444,10 @@ async def logs_view(
     
     # Apply action filter
     if action_filter and action_filter != "ALL":
-        statement = statement.where(AuditLog.action == action_filter)
+        if action_filter == "PURGE":
+            statement = statement.where(AuditLog.action.in_(["PURGE", "DELETE"]))
+        else:
+            statement = statement.where(AuditLog.action == action_filter)
     
     # Apply source filter
     if source_filter and source_filter != "ALL":
@@ -404,9 +487,11 @@ async def logs_view(
     has_next = page < total_pages
     
     # Get unique actions and sources for filter dropdowns
-    unique_actions = session.exec(
+    raw_actions = session.exec(
         select(AuditLog.action).distinct().order_by(AuditLog.action)
     ).all()
+    # Normalize: treat DELETE as PURGE and deduplicate
+    unique_actions = sorted(set("PURGE" if a == "DELETE" else a for a in raw_actions))
     unique_sources = session.exec(
         select(AuditLog.source).distinct().order_by(AuditLog.source)
     ).all()
@@ -761,25 +846,22 @@ async def update_settings(request: Request, session: Session = Depends(get_sessi
         settings.provider_name = str(form_data.get("provider_name", "AWS"))
         settings.currency_symbol = str(form_data.get("currency_symbol", "$"))
         try:
-            settings.custom_price_per_gb = float(form_data.get("custom_price_per_gb", 0.10))
+            price = float(form_data.get("custom_price_per_gb", 0.10))
         except (ValueError, TypeError):
-            settings.custom_price_per_gb = 0.10
-            
-        try:
-            settings.dockerhub_price_per_gb = float(form_data.get("dockerhub_price_per_gb", 0.00))
-        except (ValueError, TypeError):
-            settings.dockerhub_price_per_gb = 0.00
-            
-        try:
-            settings.ghcr_price_per_gb = float(form_data.get("ghcr_price_per_gb", 0.00))
-        except (ValueError, TypeError):
-            settings.ghcr_price_per_gb = 0.00
-            
-        try:
-            settings.github_hrc_price_per_gb = float(form_data.get("github_hrc_price_per_gb", 0.00))
-        except (ValueError, TypeError):
-            settings.github_hrc_price_per_gb = 0.00
-            
+            price = 0.10
+        
+        # Store price in the unified field
+        settings.custom_price_per_gb = price
+        
+        # Also populate the provider-specific field so CostCalculator works correctly
+        provider = settings.provider_name
+        if provider == "Docker Hub":
+            settings.dockerhub_price_per_gb = price
+        elif provider in ("GHCR",):
+            settings.ghcr_price_per_gb = price
+        elif provider == "GitHub HRC":
+            settings.github_hrc_price_per_gb = price
+        
         try:
             settings.monthly_budget = float(form_data.get("monthly_budget", 0.00))
         except (ValueError, TypeError):
@@ -860,50 +942,37 @@ async def metrics_history(session: Session = Depends(get_session)):
     except Exception as e:
         logger.error(f"Failed to fetch metrics history: {e}")
         return []
+@router.post("/scan-dashboard", response_class=HTMLResponse)
 async def scan_dashboard(request: Request, response: Response, session: Session = Depends(get_session)):
     """Scan Docker images/volumes and return dashboard summary"""
     try:
-        # Fetch data from ALL active registries
-        all_images = []
-        all_volumes = []
+        images = []
+        volumes = []
         
-        # 1. Local
-        local_client = RegistryClientFactory.get_client()
-        # For manual scan, we bypass cache
-        all_images.extend(local_client.list_images(bypass_cache=True))
-        all_volumes.extend(local_client.list_volumes())
+        # 1. Local Scan
+        try:
+            local_client = RegistryClientFactory.get_client()
+            # For manual scan, we bypass cache
+            images.extend(local_client.list_images(bypass_cache=True))
+            volumes.extend(local_client.list_volumes())
+        except Exception as e:
+            logger.warning(f"Local scan failed: {e}")
         
-        # 2. Remote
+        # 2. Remote Scans
         remote_configs = session.exec(select(RegistryConfig).where(RegistryConfig.is_active == True)).all()
         for config in remote_configs:
             try:
                 remote_client = RegistryClientFactory.get_client(config)
-                all_images.extend(remote_client.list_images(bypass_cache=True))
-                all_volumes.extend(remote_client.list_volumes())
+                images.extend(remote_client.list_images(bypass_cache=True))
             except Exception as e:
                 logger.warning(f"Failed to fetch from registry {config.name}: {e}")
 
-        images = all_images
-        volumes = all_volumes
-        
-        # DEBUG: Add fake volumes and waste for visualization if they are empty or all 0 size
-        if not volumes or sum(v.size_bytes for v in volumes) == 0:
-            from app.models import VolumeArtifact, VolumeStatus
-            if not volumes:
-                volumes.append(VolumeArtifact(name="fake-db-data", driver="local", size_bytes=1024**3 * 0.45, source="Local", status=VolumeStatus.ACTIVE))
-                volumes.append(VolumeArtifact(name="fake-logs-vol", driver="local", size_bytes=1024**3 * 0.12, source="Local", status=VolumeStatus.DANGLING))
-            else:
-                # Give existing volumes some fake size for visualization
-                for i, v in enumerate(volumes):
-                    v.size_bytes = 1024**3 * (0.2 + (i * 0.1))
-            
-        # Ensure some waste exists for visualization
-        waste_sum = sum(img.size_bytes for img in images if not img.tags or img.tags == ["<none>:<none>"] or any("<none>" in t for t in img.tags))
-        if waste_sum == 0 and images:
-            from app.models import ImageArtifact
-            images.append(ImageArtifact(tags=["<none>:<none>"], size_bytes=1024**3 * 0.28, digest="sha256:fake-waste", source="Local"))
+        # 3. Fallback to DB
+        if not images:
+            images = session.exec(select(ImageArtifact)).all()
+        if not volumes:
+            volumes = session.exec(select(VolumeArtifact)).all()
 
-        # Calculate metrics
         total_images = len(images)
         total_volumes = len(volumes)
         
@@ -960,7 +1029,7 @@ async def scan_dashboard(request: Request, response: Response, session: Session 
         </div>
         """
         
-        response.headers["HX-Trigger"] = '{"showMessage": "Scan Complete"}'
+        response.headers["HX-Trigger"] = '{"showMessage": {"message": "Scan Complete", "type": "success"}, "refreshDashboard": true}'
         return HTMLResponse(content=html)
         
     except Exception as e:
@@ -1023,6 +1092,14 @@ async def scan_images(request: Request, response: Response, session: Session = D
         images = []
         for res in results:
             images.extend(res)
+            
+        # Fallback to DB if live scan returned nothing
+        if not images:
+            # If no specific source filter, get all. Else filter by source.
+            stmt = select(ImageArtifact)
+            if source_filter and source_filter != "All":
+                stmt = stmt.where(ImageArtifact.source == source_filter)
+            images = session.exec(stmt).all()
         
         # Sort combined results (newest first)
         images.sort(key=lambda x: x.created_at or datetime.min, reverse=True)

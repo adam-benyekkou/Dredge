@@ -1,4 +1,4 @@
-# 🌊 Dredge
+# 🌊 <img src="static/media/dredge_logo.png" height="32" style="vertical-align: bottom;"> Dredge
 
 <div align="center">
 
@@ -17,6 +17,7 @@ A powerful, nautical-themed platform for managing Docker infrastructure costs an
 
 ## 🌊 What is Dredge?
 
+![Dredge Dashboard](docs/assets/screenshots/dashboard.png)
 **Dredge** brings clarity to the murky waters of Docker infrastructure costs. Named after the maritime process of clearing sediment, Dredge helps you identify and remove unused Docker images, optimize storage, and track your cloud registry expenses.
 
 ### Key Features

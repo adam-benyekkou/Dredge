@@ -23,7 +23,7 @@
                 <option value="ALL" {% if action_filter == "ALL" %}selected{% endif %}>All Actions</option>
                 {% for action in unique_actions %}
                 <option value="{{ action }}" {% if action_filter == action %}selected{% endif %}>
-                    {{ action }}
+                    {% if action == 'DELETE' %}Purge{% else %}{{ action | title }}{% endif %}
                 </option>
                 {% endfor %}
             </select>

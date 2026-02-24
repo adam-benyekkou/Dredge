@@ -217,10 +217,10 @@ class AppSettings(SQLModel, table=True):
     admin_username: str = Field(default="admin", max_length=100)
     admin_password: str = Field(default="admin", max_length=255) # Hashed password
     provider_name: str = Field(default="AWS", max_length=100)
-    custom_price_per_gb: float = Field(default=0.00) # Local / ECR / Default
-    dockerhub_price_per_gb: float = Field(default=0.00) # Usually free for public, paid for private
-    ghcr_price_per_gb: float = Field(default=0.00) # GitHub Storage
-    github_hrc_price_per_gb: float = Field(default=0.00) # GitHub HRC Pricing
+    custom_price_per_gb: float = Field(default=0.10) # Local / ECR / Default
+    dockerhub_price_per_gb: float = Field(default=0.00) # Docker Hub (fair use, no per-GB charge)
+    ghcr_price_per_gb: float = Field(default=0.25) # GitHub Packages storage
+    github_hrc_price_per_gb: float = Field(default=0.07) # GitHub Actions Cache
     currency_symbol: str = Field(default="$", max_length=5)
     monthly_budget: float = Field(default=0.00) # Monthly budget goal (0 = disabled)
     last_budget_alert_at: Optional[datetime] = Field(default=None) # Timestamp of last budget alert
